@@ -3,7 +3,7 @@
 #include <WiFi.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
-#include <secrets.h>  // Create & Include the Secret Credentials
+#include <secrets.h>  // Include the Secret Credentials
 
 // Initialize the LCD with the I2C address (usually 0x27 or 0x3F)
 LiquidCrystal_I2C lcd(0x27, 16, 2);  // 16x2 LCD
@@ -47,16 +47,43 @@ void loop() {
   // Update time from the NTP server
   timeClient.update();
 
-  // Get the current time
-  String currentTime = timeClient.getFormattedTime();
+  // Get the current time in seconds
+  unsigned long epochTime = timeClient.getEpochTime();
 
-  // Display the time on the LCD
+  // Convert epoch time to a struct tm
+  struct tm *ptm = gmtime((time_t *)&epochTime);
+
+  // Extract hour, minute, second, day, month, and year
+  int hour = ptm->tm_hour;
+  int minute = ptm->tm_min;
+  int second = ptm->tm_sec;
+  int day = ptm->tm_mday;
+  int month = ptm->tm_mon + 1;  // tm_mon is 0-based (0 = January)
+  int year = ptm->tm_year + 1900;  // tm_year is years since 1900
+
+  // Convert to 12-hour format and AM/PM
+  String timeString = (hour > 12) ? String(hour - 12) : (hour == 0) ? "12" : String(hour);
+  String ampm = (hour >= 12) ? "PM" : "AM";
+
+  // Format minute and second as two digits
+  String minString = (minute < 10) ? "0" + String(minute) : String(minute);
+  String secString = (second < 10) ? "0" + String(second) : String(second);
+
+  // Display time in 12-hour format with AM/PM
+  String formattedTime = timeString + ":" + minString + " " + ampm;
+
+  // Display date in DD/MM/YYYY format
+  String formattedDate = (day < 10 ? "0" : "") + String(day) + "/" +
+                         (month < 10 ? "0" : "") + String(month) + "/" +
+                         String(year);
+
+  // Display on the LCD
   lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Sydney Time:");
-  
-  lcd.setCursor(0, 1);
-  lcd.print(currentTime);  // Display the time (HH:MM:SS)
+  lcd.setCursor(0, 0);  // First row for time
+  lcd.print(formattedTime);
+
+  lcd.setCursor(0, 1);  // Second row for date
+  lcd.print(formattedDate);
 
   delay(1000);  // Update every second
 }
