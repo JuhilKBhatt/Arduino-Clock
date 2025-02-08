@@ -3,7 +3,7 @@
 #include <WiFi.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
-#include <secrets.h>  // Create & Include the Wi-Fi credentials
+#include <secrets.h>  // Create & Include the Secret Credentials
 
 // Initialize the LCD with the I2C address (usually 0x27 or 0x3F)
 LiquidCrystal_I2C lcd(0x27, 16, 2);  // 16x2 LCD
