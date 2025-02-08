@@ -17,6 +17,8 @@ const long utcOffsetInSeconds = 36000; // Sydney is UTC +10, during DST (summer)
 WiFiUDP udp;
 NTPClient timeClient(udp, "pool.ntp.org", utcOffsetInSeconds, 60000); // Update time every 60 seconds
 
+const int DayLightSaving = 1; // Daylight Saving Time (1= DST, 0=Standard Time)
+
 void setup() {
   // Start serial communication
   Serial.begin(115200);
@@ -54,7 +56,7 @@ void loop() {
   struct tm *ptm = gmtime((time_t *)&epochTime);
 
   // Extract hour, minute, second, day, month, and year
-  int hour = ptm->tm_hour;
+  int hour = ptm->tm_hour + DayLightSaving;
   int minute = ptm->tm_min;
   int second = ptm->tm_sec;
   int day = ptm->tm_mday;
