@@ -19,6 +19,14 @@ NTPClient timeClient(udp, "pool.ntp.org", utcOffsetInSeconds, 60000); // Update 
 
 const int DayLightSaving = 1; // Daylight Saving Time (1= DST, 0=Standard Time)
 
+//JoyStick
+int JoyStick_X = 34;
+int JoyStick_Y = 35;
+int JoyStick_Button = 32;
+
+// Speaker
+int Speaker = 25;
+
 void setup() {
   // Start serial communication
   Serial.begin(115200);
@@ -43,6 +51,15 @@ void setup() {
   
   // Initialize NTP client
   timeClient.begin();
+
+  // Set up the JoyStick
+  pinMode(JoyStick_X, INPUT);
+  pinMode(JoyStick_Y, INPUT);
+  pinMode(JoyStick_Button, INPUT_PULLUP);
+
+  // Set up the Speaker
+  ledcSetup(0, 2000, 8);
+  ledcAttachPin(Speaker, 0);
 }
 
 void loop() {
@@ -87,5 +104,12 @@ void loop() {
   lcd.setCursor(0, 1);  // Second row for date
   lcd.print(formattedDate);
 
-  delay(1000);  // Update every second
+  // Print JoyStick values
+  int x = analogRead(JoyStick_X);
+  int y = analogRead(JoyStick_Y);
+  int button = digitalRead(JoyStick_Button);
+
+  // Speaker tone
+
+  delay(1500);  // Update every second
 }
