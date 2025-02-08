@@ -62,6 +62,13 @@ void setup() {
   ledcAttachPin(Speaker, 0);
 }
 
+// Function to generate a tone on the speaker
+void SpeakerTone(int frequency, int duration) {
+  ledcWriteTone(0, frequency);
+  delay(duration);
+  ledcWriteTone(0, 0);
+}
+
 void loop() {
   // Update time from the NTP server
   timeClient.update();
