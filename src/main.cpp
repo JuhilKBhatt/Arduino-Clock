@@ -19,7 +19,7 @@ NTPClient timeClient(udp, "pool.ntp.org", utcOffsetInSeconds, 60000); // Update 
 
 const int DayLightSaving = 1; // Daylight Saving Time (1= DST, 0=Standard Time)
 
-//JoyStick
+// JoyStick
 int JoyStick_X = 34;
 int JoyStick_Y = 35;
 int JoyStick_Button = 32;
@@ -27,15 +27,12 @@ int JoyStick_Button = 32;
 // Speaker
 int Speaker = 25;
 
+// Page tracking
+int currentPage = 1;
+
 void setup() {
-  // Start serial communication
   Serial.begin(115200);
-
-  // Connect to Wi-Fi
-  if (ssid == nullptr || password == nullptr) {
-    Serial.println("Wi-Fi credentials are not set.");
-  }
-
+  
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
@@ -43,80 +40,71 @@ void setup() {
   }
   Serial.println("Connected to WiFi");
 
-  Wire.begin(13, 14); // SDA on pin 13, SCL on pin 14
-
-  // Initialize the LCD
+  Wire.begin(13, 14);
   lcd.begin(16, 2);
   lcd.backlight();
-  
-  // Initialize NTP client
   timeClient.begin();
 
-  // Set up the JoyStick
   pinMode(JoyStick_X, INPUT);
   pinMode(JoyStick_Y, INPUT);
   pinMode(JoyStick_Button, INPUT_PULLUP);
-
-  // Set up the Speaker
+  
   ledcSetup(0, 2000, 8);
   ledcAttachPin(Speaker, 0);
 }
 
-// Function to generate a tone on the speaker
-void SpeakerTone(int frequency, int duration) {
-  ledcWriteTone(0, frequency);
-  delay(duration);
-  ledcWriteTone(0, 0);
+void LCDPrint(String line1, String line2) {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(line1);
+  lcd.setCursor(0, 1);
+  lcd.print(line2);
 }
 
-void loop() {
-  // Update time from the NTP server
+void displayClock() {
   timeClient.update();
-
-  // Get the current time in seconds
   unsigned long epochTime = timeClient.getEpochTime();
-
-  // Convert epoch time to a struct tm
   struct tm *ptm = gmtime((time_t *)&epochTime);
-
-  // Extract hour, minute, second, day, month, and year
   int hour = ptm->tm_hour + DayLightSaving;
   int minute = ptm->tm_min;
   int second = ptm->tm_sec;
   int day = ptm->tm_mday;
-  int month = ptm->tm_mon + 1;  // tm_mon is 0-based (0 = January)
-  int year = ptm->tm_year + 1900;  // tm_year is years since 1900
+  int month = ptm->tm_mon + 1;
+  int year = ptm->tm_year + 1900;
 
-  // Convert to 12-hour format and AM/PM
   String timeString = (hour > 12) ? String(hour - 12) : (hour == 0) ? "12" : String(hour);
   String ampm = (hour >= 12) ? "PM" : "AM";
-
-  // Format minute and second as two digits
   String minString = (minute < 10) ? "0" + String(minute) : String(minute);
-  String secString = (second < 10) ? "0" + String(second) : String(second);
-
-  // Display time in 12-hour format with AM/PM
   String formattedTime = timeString + ":" + minString + " " + ampm;
+  String formattedDate = (day < 10 ? "0" : "") + String(day) + "/" + (month < 10 ? "0" : "") + String(month) + "/" + String(year);
 
-  // Display date in DD/MM/YYYY format
-  String formattedDate = (day < 10 ? "0" : "") + String(day) + "/" +
-                         (month < 10 ? "0" : "") + String(month) + "/" +
-                         String(year);
+  LCDPrint(formattedTime, formattedDate + " (1/2)");
+}
 
-  // Display on the LCD
-  lcd.clear();
-  lcd.setCursor(0, 0);  // First row for time
-  lcd.print(formattedTime);
-
-  lcd.setCursor(0, 1);  // Second row for date
-  lcd.print(formattedDate);
-
-  // Print JoyStick values
+void displayTimer() {
   int x = analogRead(JoyStick_X);
   int y = analogRead(JoyStick_Y);
-  int button = digitalRead(JoyStick_Button);
+  LCDPrint("X: " + String(x), "Y: " + String(y) + " (2/2)");
+}
 
-  // Speaker tone
+void loop() {
+  int x = analogRead(JoyStick_X);
+  int y = analogRead(JoyStick_Y);
+  int buttonState = digitalRead(JoyStick_Button);
 
-  delay(1500);  // Update every second
+  if (x < 2100 && y < 100) {
+    currentPage = 2;
+  } else if (x < 2100 && y > 4000) {
+    currentPage = 1;
+  }
+
+  switch (currentPage) {
+    case 1:
+      displayClock();
+      break;
+    case 2:
+      displayTimer();
+      break;
+  }
+  delay(500);
 }
