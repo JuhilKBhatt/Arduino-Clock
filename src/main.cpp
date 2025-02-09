@@ -30,6 +30,11 @@ int Speaker = 25;
 // Page tracking
 int currentPage = 1;
 
+// Timer variables
+int timerMinutes = 0;
+bool timerRunning = false;
+unsigned long timerStartMillis = 0;
+
 void setup() {
   Serial.begin(115200);
   
@@ -84,17 +89,43 @@ void displayClock() {
 void displayTimer() {
   int x = analogRead(JoyStick_X);
   int y = analogRead(JoyStick_Y);
-  LCDPrint("X: " + String(x), "Y: " + String(y) + " (2/2)");
+  int button = digitalRead(JoyStick_Button);
+
+  if (x < 100 && y < 1900) {
+    timerMinutes += 5;
+  } else if (x > 4000 && y < 1900) {
+    timerMinutes = max(0, timerMinutes - 5);
+  }
+
+  if (button == 0) {
+    timerRunning = true;
+    timerStartMillis = millis();
+  }
+
+  if (timerRunning) {
+    unsigned long elapsedMillis = millis() - timerStartMillis;
+    int remainingTime = max(0L, static_cast<long>(timerMinutes) * 60000 - static_cast<long>(elapsedMillis));
+    int remainingMinutes = remainingTime / 60000;
+    int remainingSeconds = (remainingTime % 60000) / 1000;
+
+    if (remainingTime == 0) {
+      timerRunning = false;
+      LCDPrint("Timer Done!", "Press to reset");
+      return;
+    }
+    LCDPrint("Timer:", String(remainingMinutes) + "m " + String(remainingSeconds) + "s");
+  } else {
+    LCDPrint("Set Timer:", String(timerMinutes) + " min");
+  }
 }
 
 void loop() {
   int x = analogRead(JoyStick_X);
   int y = analogRead(JoyStick_Y);
-  int buttonState = digitalRead(JoyStick_Button);
 
-  if (x < 2100 && y < 100) {
+  if (x < 2300 && y < 100) {
     currentPage = 2;
-  } else if (x < 2100 && y > 4000) {
+  } else if (x < 2300 && y > 4000) {
     currentPage = 1;
   }
 
