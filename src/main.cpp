@@ -58,6 +58,35 @@ void setup() {
   ledcAttachPin(Speaker, 0);
 }
 
+// Function to generate a tone on the speaker
+void SpeakerBeeps() {
+  ledcWriteTone(0, 2000);
+  delay(100);
+  ledcWriteTone(0, 0);
+
+  ledcWriteTone(0, 2000);
+  delay(100);
+  ledcWriteTone(0, 0);
+
+  ledcWriteTone(0, 2000);
+  delay(100);
+  ledcWriteTone(0, 0);
+
+  delay(500);
+
+  ledcWriteTone(0, 2000);
+  delay(100);
+  ledcWriteTone(0, 0);
+
+  ledcWriteTone(0, 2000);
+  delay(100);
+  ledcWriteTone(0, 0);
+
+  ledcWriteTone(0, 2000);
+  delay(100);
+  ledcWriteTone(0, 0);
+}
+
 void LCDPrint(String line1, String line2) {
   lcd.clear();
   lcd.setCursor(0, 0);
@@ -111,6 +140,7 @@ void displayTimer() {
     if (remainingTime == 0) {
       timerRunning = false;
       LCDPrint("Timer Done!", "Press to reset");
+      SpeakerBeeps();
       return;
     }
     LCDPrint("Timer:", String(remainingMinutes) + "m " + String(remainingSeconds) + "s");
