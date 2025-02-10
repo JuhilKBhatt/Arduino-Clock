@@ -29,6 +29,7 @@ int Speaker = 25;
 
 // Page tracking
 int currentPage = 1;
+int totalPages = 2;
 
 // Timer variables
 int timerMinutes = 0;
@@ -91,8 +92,18 @@ void LCDPrint(String line1, String line2) {
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print(line1);
+
   lcd.setCursor(0, 1);
+  String pageIndicator = "(" + String(currentPage) + "/" + String(totalPages) + ")";
+  int availableSpace = 16 - pageIndicator.length(); // Space left for text
+
+  if (line2.length() > availableSpace) {
+    line2 = line2.substring(0, availableSpace); // Truncate if too long
+  }
+
   lcd.print(line2);
+  lcd.setCursor(availableSpace, 1);
+  lcd.print(pageIndicator);
 }
 
 void displayClock() {
