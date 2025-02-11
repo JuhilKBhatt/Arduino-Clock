@@ -61,21 +61,31 @@ void setup() {
 
 // Function to generate a tone on the speaker
 void SpeakerBeeps() {
-  for (int i = 0; i < 3; i++) {  // Three short beeps
-    ledcWriteTone(0, 2000);
-    delay(200);
-    ledcWriteTone(0, 0);
-    delay(100);
-  }
+  ledcWriteTone(0, 2000);
+  delay(100);
+  ledcWriteTone(0, 0);
 
-  delay(500); // Pause between sets
+  ledcWriteTone(0, 2000);
+  delay(100);
+  ledcWriteTone(0, 0);
 
-  for (int i = 0; i < 3; i++) {  // Another three short beeps
-    ledcWriteTone(0, 2000);
-    delay(200);
-    ledcWriteTone(0, 0);
-    delay(100);
-  }
+  ledcWriteTone(0, 2000);
+  delay(100);
+  ledcWriteTone(0, 0);
+
+  delay(500);
+
+  ledcWriteTone(0, 2000);
+  delay(100);
+  ledcWriteTone(0, 0);
+
+  ledcWriteTone(0, 2000);
+  delay(100);
+  ledcWriteTone(0, 0);
+
+  ledcWriteTone(0, 2000);
+  delay(100);
+  ledcWriteTone(0, 0);
 }
 
 void LCDPrint(String line1, String line2) {
@@ -113,7 +123,7 @@ void displayClock() {
   String formattedTime = timeString + ":" + minString + " " + ampm;
   String formattedDate = (day < 10 ? "0" : "") + String(day) + "/" + (month < 10 ? "0" : "") + String(month) + "/" + String(year);
 
-  LCDPrint(formattedTime, formattedDate);
+  LCDPrint(formattedTime, formattedDate + " (1/2)");
 }
 
 void displayTimer() {
@@ -140,7 +150,7 @@ void displayTimer() {
 
     if (remainingTime == 0) {
       timerRunning = false;
-      LCDPrint("","Timer Done!");
+      LCDPrint("Timer Done!", "Press to reset");
       SpeakerBeeps();
       return;
     }
