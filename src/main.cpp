@@ -150,23 +150,51 @@ void displayTimer() {
   }
 }
 
+unsigned long lastInputSampleMillis = 0;
+unsigned long lastDisplayUpdateMillis = 0;
+
 void loop() {
-  int x = analogRead(JoyStick_X);
-  int y = analogRead(JoyStick_Y);
+  unsigned long currentMillis = millis();
 
-  if (x < 2300 && y < 100) {
-    currentPage = 2;
-  } else if (x < 2300 && y > 4000) {
-    currentPage = 1;
+  // Joystick Input
+  if (currentMillis - lastInputSampleMillis >= 500) {
+    lastInputSampleMillis = currentMillis;
+    int x = analogRead(JoyStick_X);
+    int y = analogRead(JoyStick_Y);
+    int button = digitalRead(JoyStick_Button);
+
+    if (x < 2300 && y < 100) {
+      currentPage = 2;
+    } else if (x < 2300 && y > 4000) {
+      currentPage = 1;
+    }
+
+    // Handle timer logic separately
+    if (currentPage == 2) {
+      if (x < 100 && y < 1900) {
+        timerMinutes += 5;
+      } else if (x > 4000 && y < 1900) {
+        timerMinutes = max(0, timerMinutes - 5);
+      }
+
+      if (button == 0) {
+        timerRunning = true;
+        timerStartMillis = millis();
+      }
+    }
   }
 
-  switch (currentPage) {
-    case 1:
-      displayClock();
-      break;
-    case 2:
-      displayTimer();
-      break;
+  // Refresh display
+  if (currentMillis - lastDisplayUpdateMillis >= 500) {
+    lastDisplayUpdateMillis = currentMillis;
+    
+    switch (currentPage) {
+      case 1:
+        displayClock();
+        break;
+      case 2:
+        displayTimer();
+        break;
+    }
   }
-  delay(500);
 }
