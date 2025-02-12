@@ -62,18 +62,20 @@ void setup() {
 // Function to generate a tone on the speaker
 void SpeakerBeeps() {
   for (int i = 0; i < 3; i++) {  // Three short beeps
-    ledcWriteTone(0, 2000);
+    ledcWrite(0, 1000);  // Set duty cycle for volume
+    ledcWriteTone(0, 5000);
     delay(200);
-    ledcWriteTone(0, 0);
+    ledcWrite(0, 0);  // Mute the speaker
     delay(100);
   }
 
   delay(500); // Pause between sets
 
   for (int i = 0; i < 3; i++) {  // Another three short beeps
-    ledcWriteTone(0, 2000);
+    ledcWrite(0, 1000);
+    ledcWriteTone(0, 5000);
     delay(200);
-    ledcWriteTone(0, 0);
+    ledcWrite(0, 0);
     delay(100);
   }
 }
