@@ -17,7 +17,7 @@ const long utcOffsetInSeconds = 36000; // Sydney is UTC +10, during DST (summer)
 WiFiUDP udp;
 NTPClient timeClient(udp, "pool.ntp.org", utcOffsetInSeconds, 60000); // Update time every 60 seconds
 
-const int DayLightSaving = 1; // Daylight Saving Time (1= DST, 0=Standard Time)
+const int DayLightSaving = 0; // Daylight Saving Time (1= DST, 0=Standard Time)
 
 // JoyStick
 int JoyStick_X = 34;
