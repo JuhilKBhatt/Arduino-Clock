@@ -28,12 +28,7 @@ int JoyStick_Button = 32;
 int Speaker = 25;
 
 // Thermistor
-int Thermistor_Pin = 4;
-const int ThermistorSeriesResistor = 10000; // 10kΩ resistor
-const float ThermistorNominal = 10000;      // Resistance at 25 degrees C
-const float TemperatureNominal = 25.0;      // Temp for nominal resistance (in C)
-const float BetaCoefficient = 3950.0;       // Beta coefficient of the thermistor
-const int ADCMax = 4095;                    // 12-bit ADC for ESP32
+int Thermistor_Pin = 33;
 
 // Page tracking
 int currentPage = 1;
@@ -107,16 +102,16 @@ void LCDPrint(String line1, String line2) {
 }
 
 float readTemperatureC() {
-  int analogValue = analogRead(Thermistor_Pin);
-  float resistance = ThermistorSeriesResistor * ((float)ADCMax / analogValue - 1);
+  int rawValue = analogRead(Thermistor_Pin);
+  if (rawValue == 0) return -999;
+  float resistance = (4095.0 / rawValue - 1.0) * 10000.0;
   float steinhart;
-  steinhart = resistance / ThermistorNominal;       // (R/Ro)
-  steinhart = log(steinhart);                       // ln(R/Ro)
-  steinhart /= BetaCoefficient;                     // 1/B * ln(R/Ro)
-  steinhart += 1.0 / (TemperatureNominal + 273.15); // + (1/To)
-  steinhart = 1.0 / steinhart;                      // Invert
-  steinhart -= 273.15;                              // Convert to °C
-  return steinhart;
+  steinhart = log(resistance / 10000.0);
+  steinhart /= 3950.0;
+  steinhart += 1.0 / (25.0 + 273.15);
+  steinhart = 1.0 / steinhart;
+  steinhart -= 273.15;
+  return round(steinhart);
 }
 
 void displayClock() {
@@ -133,7 +128,7 @@ void displayClock() {
   String timeString = (hour > 12) ? String(hour - 12) : (hour == 0) ? "12" : String(hour);
   String ampm = (hour >= 12) ? "PM" : "AM";
   String minString = (minute < 10) ? "0" + String(minute) : String(minute);
-  String formattedTime = timeString + ":" + minString + " " + ampm + "     " + readTemperatureC() + "°C";
+  String formattedTime = timeString + ":" + minString + " " + ampm + "     " + String((int)readTemperatureC()) + (char)223 + "C";
   String formattedDate = (day < 10 ? "0" : "") + String(day) + "/" + (month < 10 ? "0" : "") + String(month) + "/" + String(year);
 
   LCDPrint(formattedTime, formattedDate);
