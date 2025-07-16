@@ -1,0 +1,17 @@
+{
+  "title": "Multi Funtional Arduino Clock",
+  "description": "This project is a multifunctional Arduino clock that displays time, date, and temperature. It features an LCD display and uses a DS3231 RTC module for accurate timekeeping.",
+  "language": ["C++", "Arduino"],
+  "liveDemo": "",
+  "images": [
+    "https://res.cloudinary.com/dmj4ggkjq/image/upload/v1752665481/Arduino-Clock-1_nxzo2k.png",
+    "https://res.cloudinary.com/dmj4ggkjq/image/upload/v1752665484/Arduino-Clock-2_aswit7.png",
+    "https://res.cloudinary.com/dmj4ggkjq/image/upload/v1752665486/Arduino-Clock-3_hnvno1.png",
+    "https://res.cloudinary.com/dmj4ggkjq/image/upload/a_-90/v1752665489/Arduino-Clock-4_wibujb.png"
+  ],
+  "videoDemo": "",
+  "Priority": 1,
+  "type": "Solo",
+  "version": "Alpha",
+  "Visibilty": true
+}
