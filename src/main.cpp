@@ -3,6 +3,7 @@
 #include <WiFi.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
+#include <time.h>
 #include <secrets.h>  // Include the Secret Credentials
 
 // Initialize the LCD with the I2C address (usually 0x27 or 0x3F)
@@ -12,10 +13,8 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);  // 16x2 LCD
 const char* ssid = SECRET_SSID;  // Wi-Fi SSID from build_flags
 const char* password = SECRET_PASS;  // Wi-Fi password from build_flags
 
-// NTP setup
-const long utcOffsetInSeconds = 36000; // Sydney is UTC +10, during DST (summer) it's UTC +11
-WiFiUDP udp;
-NTPClient timeClient(udp, "pool.ntp.org", utcOffsetInSeconds, 60000); // Update time every 60 seconds
+// NTP Client setup
+const char* tz_sydney = "AEST-10AEDT,M10.1.0/2,M4.1.0/3";
 
 const int DayLightSaving = 0; // Daylight Saving Time (1= DST, 0=Standard Time)
 
@@ -52,7 +51,7 @@ void setup() {
   Wire.begin(13, 14);
   lcd.begin(16, 2);
   lcd.backlight();
-  timeClient.begin();
+  configTzTime(tz_sydney, "pool.ntp.org");
 
   pinMode(JoyStick_X, INPUT);
   pinMode(JoyStick_Y, INPUT);
@@ -115,19 +114,31 @@ float readTemperatureC() {
 }
 
 void displayClock() {
-  timeClient.update();
-  unsigned long epochTime = timeClient.getEpochTime();
-  struct tm *ptm = gmtime((time_t *)&epochTime);
-  int hour = ptm->tm_hour + DayLightSaving;
-  int minute = ptm->tm_min;
-  int second = ptm->tm_sec;
-  int day = ptm->tm_mday;
-  int month = ptm->tm_mon + 1;
-  int year = ptm->tm_year + 1900;
+  struct tm timeinfo;
+  // Get local time; it will be null until NTP sync is complete
+  if (!getLocalTime(&timeinfo)) {
+    LCDPrint("Syncing time...", "");
+    return;
+  }
 
-  String timeString = (hour > 12) ? String(hour - 12) : (hour == 0) ? "12" : String(hour);
+  int hour = timeinfo.tm_hour;
+  int minute = timeinfo.tm_min;
+  int day = timeinfo.tm_mday;
+  int month = timeinfo.tm_mon + 1; // Month is 0-11
+  int year = timeinfo.tm_year + 1900; // Year is years since 1900
+
+  // Format time for 12-hour clock
   String ampm = (hour >= 12) ? "PM" : "AM";
+  if (hour > 12) {
+    hour -= 12;
+  }
+  if (hour == 0) {
+    hour = 12;
+  }
+  
+  String timeString = String(hour);
   String minString = (minute < 10) ? "0" + String(minute) : String(minute);
+  
   String formattedTime = timeString + ":" + minString + " " + ampm + "     " + String((int)readTemperatureC()) + (char)223 + "C";
   String formattedDate = (day < 10 ? "0" : "") + String(day) + "/" + (month < 10 ? "0" : "") + String(month) + "/" + String(year);
 
