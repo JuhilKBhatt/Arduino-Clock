@@ -31,6 +31,11 @@ int Thermistor_Pin = 33;
 
 // Page tracking
 int currentPage = 0;
+int previousPage = -1;
+
+// Display change tracking
+String lastLine1 = "";
+String lastLine2 = "";
 int totalPages = 2;
 
 // Timer variables
@@ -86,11 +91,6 @@ void SpeakerBeeps() {
 }
 
 void LCDPrint(String line1, String line2) {
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print(line1);
-
-  lcd.setCursor(0, 1);
   String pageIndicator = "(" + String(currentPage) + "/" + String(totalPages) + ")";
   int availableSpace = 16 - pageIndicator.length(); // Space left for text
 
@@ -98,9 +98,23 @@ void LCDPrint(String line1, String line2) {
     line2 = line2.substring(0, availableSpace); // Truncate if too long
   }
 
-  lcd.print(line2);
-  lcd.setCursor(availableSpace, 1);
-  lcd.print(pageIndicator);
+  String fullLine2 = line2;
+  // Pad to fill available space so old text is overwritten
+  while (fullLine2.length() < (unsigned int)availableSpace) fullLine2 += " ";
+  fullLine2 += pageIndicator;
+
+  // Only update if content has changed
+  if (line1 == lastLine1 && fullLine2 == lastLine2) return;
+
+  lastLine1 = line1;
+  lastLine2 = fullLine2;
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(line1);
+
+  lcd.setCursor(0, 1);
+  lcd.print(fullLine2);
 }
 
 float readTemperatureC() {
@@ -119,6 +133,8 @@ float readTemperatureC() {
 void displayOff() {
   lcd.clear();
   lcd.noBacklight();
+  lastLine1 = "";
+  lastLine2 = "";
 }
 
 void displayClock() {
@@ -202,9 +218,20 @@ void loop() {
     joystickMoved = false;
   }
 
+  // Invalidate display cache on page change
+  if (currentPage != previousPage) {
+    lastLine1 = "";
+    lastLine2 = "";
+    previousPage = currentPage;
+  }
+
   switch (currentPage) {
     case 0:
-      displayOff();
+      // displayOff clears & turns off backlight; cache check prevents repeated calls
+      if (lastLine1 == "" && lastLine2 == "") {
+        displayOff();
+        lastLine1 = "OFF";  // sentinel so we don't call again
+      }
       break;
     case 1:
       lcd.backlight();
@@ -215,5 +242,5 @@ void loop() {
       displayTimer();
       break;
   }
-  delay(500);
+  delay(100);
 }
