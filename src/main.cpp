@@ -30,7 +30,7 @@ int Speaker = 25;
 int Thermistor_Pin = 33;
 
 // Page tracking
-int currentPage = 0;
+int currentPage = 1;
 int previousPage = -1;
 
 // Display change tracking
@@ -42,6 +42,10 @@ int totalPages = 2;
 int timerMinutes = 0;
 bool timerRunning = false;
 unsigned long timerStartMillis = 0;
+
+// Timer joystick/button debounce
+bool timerJoystickMoved = false;
+bool lastButtonState = true;  // true = not pressed (INPUT_PULLUP)
 
 // Joystick debounce for page navigation
 bool joystickMoved = false;
@@ -117,8 +121,18 @@ void LCDPrint(String line1, String line2) {
   lcd.print(fullLine2);
 }
 
+// Last displayed temperature for hysteresis
+float lastDisplayedTemp = -999;
+
 float readTemperatureC() {
-  int rawValue = analogRead(Thermistor_Pin);
+  // Average multiple ADC samples to reduce noise
+  const int numSamples = 16;
+  long total = 0;
+  for (int i = 0; i < numSamples; i++) {
+    total += analogRead(Thermistor_Pin);
+  }
+  int rawValue = total / numSamples;
+
   if (rawValue == 0) return -999;
   float resistance = (4095.0 / rawValue - 1.0) * 10000.0;
   float steinhart;
@@ -127,7 +141,14 @@ float readTemperatureC() {
   steinhart += 1.0 / (25.0 + 273.15);
   steinhart = 1.0 / steinhart;
   steinhart -= 273.15;
-  return round(steinhart);
+
+  float rounded = round(steinhart);
+
+  // Hysteresis: only update displayed value if reading moved >0.5°C away
+  if (lastDisplayedTemp == -999 || abs(steinhart - lastDisplayedTemp) > 0.5) {
+    lastDisplayedTemp = rounded;
+  }
+  return lastDisplayedTemp;
 }
 
 void displayOff() {
@@ -172,18 +193,34 @@ void displayClock() {
 void displayTimer() {
   int x = analogRead(JoyStick_X);
   int y = analogRead(JoyStick_Y);
-  int button = digitalRead(JoyStick_Button);
+  bool buttonPressed = (digitalRead(JoyStick_Button) == 0);
 
-  if (x < 100 && y < 1900) {
-    timerMinutes += 5;
-  } else if (x > 4000 && y < 1900) {
-    timerMinutes = max(0, timerMinutes - 5);
+  // Debounced joystick: only adjust once per tilt, must return to center first
+  if (!timerRunning) {
+    if (x < 100 && y < 1900 && !timerJoystickMoved) {
+      timerMinutes += 5;
+      timerJoystickMoved = true;
+    } else if (x > 4000 && y < 1900 && !timerJoystickMoved) {
+      timerMinutes = max(0, timerMinutes - 5);
+      timerJoystickMoved = true;
+    } else if (x >= 100 && x <= 4000) {
+      timerJoystickMoved = false;  // reset when joystick returns to center
+    }
   }
 
-  if (button == 0) {
-    timerRunning = true;
-    timerStartMillis = millis();
+  // Debounced button: detect rising edge (released → pressed)
+  if (buttonPressed && lastButtonState) {
+    if (timerRunning) {
+      // Cancel the running timer
+      timerRunning = false;
+      timerMinutes = 0;
+    } else if (timerMinutes > 0) {
+      // Start the timer
+      timerRunning = true;
+      timerStartMillis = millis();
+    }
   }
+  lastButtonState = !buttonPressed;  // true when not pressed
 
   if (timerRunning) {
     unsigned long elapsedMillis = millis() - timerStartMillis;
