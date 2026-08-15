@@ -30,13 +30,16 @@ int Speaker = 25;
 int Thermistor_Pin = 33;
 
 // Page tracking
-int currentPage = 1;
+int currentPage = 0;
 int totalPages = 2;
 
 // Timer variables
 int timerMinutes = 0;
 bool timerRunning = false;
 unsigned long timerStartMillis = 0;
+
+// Joystick debounce for page navigation
+bool joystickMoved = false;
 
 void setup() {
   Serial.begin(115200);
@@ -113,6 +116,11 @@ float readTemperatureC() {
   return round(steinhart);
 }
 
+void displayOff() {
+  lcd.clear();
+  lcd.noBacklight();
+}
+
 void displayClock() {
   struct tm timeinfo;
   // Get local time; it will be null until NTP sync is complete
@@ -183,17 +191,27 @@ void loop() {
   int x = analogRead(JoyStick_X);
   int y = analogRead(JoyStick_Y);
 
-  if (x < 2300 && y < 100) {
-    currentPage = 2;
-  } else if (x < 2300 && y > 4000) {
-    currentPage = 1;
+  // Page navigation: tilt Y-axis to cycle through pages 0 → 1 → 2
+  if (x < 2300 && y < 100 && !joystickMoved) {
+    currentPage = min(2, currentPage + 1);
+    joystickMoved = true;
+  } else if (x < 2300 && y > 4000 && !joystickMoved) {
+    currentPage = max(0, currentPage - 1);
+    joystickMoved = true;
+  } else if (y >= 100 && y <= 4000) {
+    joystickMoved = false;
   }
 
   switch (currentPage) {
+    case 0:
+      displayOff();
+      break;
     case 1:
+      lcd.backlight();
       displayClock();
       break;
     case 2:
+      lcd.backlight();
       displayTimer();
       break;
   }

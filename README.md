@@ -6,12 +6,13 @@ An ESP32-based multifunctional clock that displays time, date, and temperature o
 
 ## Features
 
+- **Off Page** — Turns off the LCD backlight to save power; use the joystick to wake to clock or timer.
 - **Real-Time Clock** — Syncs with NTP over Wi-Fi and displays the current time in 12-hour format (AM/PM) with the Sydney/AEST timezone.
 - **Date Display** — Shows the current date in `DD/MM/YYYY` format.
 - **Temperature Reading** — Reads ambient temperature from a thermistor (NTC 10 kΩ, β = 3950) and displays it in °C.
 - **Countdown Timer** — Set a timer in 5-minute increments using the joystick; a speaker beeps when the timer completes.
-- **Joystick Navigation** — Switch between clock and timer pages, and adjust timer values with a two-axis joystick + button.
-- **Page Indicator** — The LCD shows a `(1/2)` or `(2/2)` page indicator so you always know which screen you're on.
+- **Joystick Navigation** — Cycle through three pages (Off → Clock → Timer) with Y-axis tilts, and adjust timer values with the X-axis.
+- **Page Indicator** — Active pages show a `(1/2)` or `(2/2)` indicator on the LCD.
 
 ## Hardware
 
@@ -99,20 +100,21 @@ Built-in ESP32/Arduino libraries: `WiFi`, `Wire`, `time`
 
 ## Usage
 
-| Action                  | Joystick Input              |
-|-------------------------|-----------------------------|
-| Switch to Timer page    | Tilt Y-axis down            |
-| Switch to Clock page    | Tilt Y-axis up              |
+| Action                  | Joystick Input                |
+|-------------------------|-------------------------------|
+| Next page (Off→Clock→Timer) | Tilt Y-axis (one direction)  |
+| Previous page (Timer→Clock→Off) | Tilt Y-axis (other direction) |
 | Increase timer (+5 min) | Tilt X-axis left (Timer page) |
 | Decrease timer (−5 min) | Tilt X-axis right (Timer page) |
-| Start timer             | Press joystick button       |
+| Start timer             | Press joystick button         |
 
 ## How It Works
 
 1. On boot the ESP32 connects to Wi-Fi and syncs with `pool.ntp.org` using the `AEST-10AEDT` timezone string (Sydney time with automatic daylight saving transitions).
-2. **Page 1 (Clock)** — Displays `H:MM AM/PM  ##°C` on the first LCD line and `DD/MM/YYYY (1/2)` on the second.
-3. **Page 2 (Timer)** — Lets you set a countdown in 5-minute steps. Once started, it shows the remaining time. When it reaches zero, the speaker plays two sets of three beeps.
-4. Temperature is calculated from the thermistor's analog reading using the Steinhart–Hart equation.
+2. **Page 0 (Off)** — The LCD backlight is turned off and the display is cleared. Tilt the joystick to navigate to an active page.
+3. **Page 1 (Clock)** — Displays `H:MM AM/PM  ##°C` on the first LCD line and `DD/MM/YYYY (1/2)` on the second.
+4. **Page 2 (Timer)** — Lets you set a countdown in 5-minute steps. Once started, it shows the remaining time. When it reaches zero, the speaker plays two sets of three beeps.
+5. Temperature is calculated from the thermistor's analog reading using the Steinhart–Hart equation.
 
 ## License
 
