@@ -265,9 +265,9 @@ void loop() {
     if (elapsedMillis >= static_cast<unsigned long>(timerMinutes) * 60000) {
       timerRunning = false;
       timerMinutes = 0;
-      currentPage = 2; // Jump to timer page
-      lcd.backlight(); // Ensure backlight is on
-      LCDPrint("Timer:", "Timer Done!"); // Show message
+      if (currentPage == 2) {
+        LCDPrint("Timer:", "Timer Done!"); // Show message if already on timer page
+      }
       SpeakerBeeps();
     }
   }
