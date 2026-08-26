@@ -73,7 +73,29 @@ void setup() {
   ledcAttachPin(Speaker, 0);
 }
 
-// Function to generate a tone on the speaker
+// Functions to generate tones on the speaker
+void SpeakerStartTone() {
+  ledcWrite(0, 1000);
+  ledcWriteTone(0, 2000);
+  delay(100);
+  ledcWriteTone(0, 3000);
+  delay(100);
+  ledcWriteTone(0, 4000);
+  delay(100);
+  ledcWrite(0, 0);
+}
+
+void SpeakerCancelTone() {
+  ledcWrite(0, 1000);
+  ledcWriteTone(0, 4000);
+  delay(100);
+  ledcWriteTone(0, 3000);
+  delay(100);
+  ledcWriteTone(0, 2000);
+  delay(100);
+  ledcWrite(0, 0);
+}
+
 void SpeakerBeeps() {
   for (int i = 0; i < 3; i++) {  // Three short beeps
     ledcWrite(0, 1000);  // Set duty cycle for volume
@@ -214,10 +236,12 @@ void displayTimer() {
       // Cancel the running timer
       timerRunning = false;
       timerMinutes = 0;
+      SpeakerCancelTone();
     } else if (timerMinutes > 0) {
       // Start the timer
       timerRunning = true;
       timerStartMillis = millis();
+      SpeakerStartTone();
     }
   }
   lastButtonState = !buttonPressed;  // true when not pressed
@@ -228,12 +252,6 @@ void displayTimer() {
     int remainingMinutes = remainingTime / 60000;
     int remainingSeconds = (remainingTime % 60000) / 1000;
 
-    if (remainingTime == 0) {
-      timerRunning = false;
-      LCDPrint("","Timer Done!");
-      SpeakerBeeps();
-      return;
-    }
     LCDPrint("Timer:", String(remainingMinutes) + "m " + String(remainingSeconds) + "s");
   } else {
     LCDPrint("Set Timer:", String(timerMinutes) + " min");
@@ -241,6 +259,19 @@ void displayTimer() {
 }
 
 void loop() {
+  // Timer expiration check
+  if (timerRunning) {
+    unsigned long elapsedMillis = millis() - timerStartMillis;
+    if (elapsedMillis >= static_cast<unsigned long>(timerMinutes) * 60000) {
+      timerRunning = false;
+      timerMinutes = 0;
+      currentPage = 2; // Jump to timer page
+      lcd.backlight(); // Ensure backlight is on
+      LCDPrint("Timer:", "Timer Done!"); // Show message
+      SpeakerBeeps();
+    }
+  }
+
   int x = analogRead(JoyStick_X);
   int y = analogRead(JoyStick_Y);
 
