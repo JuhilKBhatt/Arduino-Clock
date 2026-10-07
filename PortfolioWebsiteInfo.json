@@ -2,25 +2,16 @@
   "title": "Multi-Functional Arduino Clock",
   "description": "An ESP32-based multifunctional digital clock and countdown timer system featuring a 16×2 I2C LCD display, ambient temperature monitoring via an NTC thermistor, Wi-Fi NTP time synchronization for Sydney/AEST timezone, and two-axis analog joystick navigation.",
   "techStack": {
-    "Frontend": [
-      "16x2 I2C LCD",
-      "LiquidCrystal_I2C"
-    ],
     "Backend": [
       "C++",
-      "Arduino",
-      "ESP32",
-      "NTPClient",
-      "Wire (I2C)"
+      "ESP32"
     ],
     "AI": [],
     "DevSecOps": [
-      "PlatformIO",
-      "Git"
+      "Github"
     ],
     "Test Automation": [
       "Serial Monitor Telemetry",
-      "Hardware-in-the-Loop Testing"
     ]
   },
   "liveDemo": "",
@@ -34,8 +25,8 @@
   "Priority": 1,
   "category": "Embedded",
   "type": "Solo",
-  "version": "Alpha",
-  "versionNumber": "0.1.0",
+  "version": "Beta",
+  "versionNumber": "0.5.1",
   "Highlights": [
     "Precision NTP time synchronization over Wi-Fi with automatic Sydney (AEST/AEDT) daylight saving adjustments",
     "Real-time analog temperature telemetry using an NTC 10 kΩ thermistor calculated via the Steinhart–Hart equation",
