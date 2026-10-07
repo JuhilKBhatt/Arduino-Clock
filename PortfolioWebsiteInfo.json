@@ -1,7 +1,28 @@
 {
-  "title": "Multi Funtional Arduino Clock",
-  "description": "This project is a multifunctional Arduino clock that displays time, date, and temperature. It features an LCD display and uses a DS3231 RTC module for accurate timekeeping.",
-  "language": ["C++", "Arduino"],
+  "title": "Multi-Functional Arduino Clock",
+  "description": "An ESP32-based multifunctional digital clock and countdown timer system featuring a 16×2 I2C LCD display, ambient temperature monitoring via an NTC thermistor, Wi-Fi NTP time synchronization for Sydney/AEST timezone, and two-axis analog joystick navigation.",
+  "techStack": {
+    "Frontend": [
+      "16x2 I2C LCD",
+      "LiquidCrystal_I2C"
+    ],
+    "Backend": [
+      "C++",
+      "Arduino",
+      "ESP32",
+      "NTPClient",
+      "Wire (I2C)"
+    ],
+    "AI": [],
+    "DevSecOps": [
+      "PlatformIO",
+      "Git"
+    ],
+    "Test Automation": [
+      "Serial Monitor Telemetry",
+      "Hardware-in-the-Loop Testing"
+    ]
+  },
   "liveDemo": "",
   "images": [
     "https://res.cloudinary.com/dmj4ggkjq/image/upload/v1752665481/Arduino-Clock-1_nxzo2k.png",
@@ -11,7 +32,16 @@
   ],
   "videoDemo": "",
   "Priority": 1,
+  "category": "Embedded",
   "type": "Solo",
   "version": "Alpha",
+  "versionNumber": "0.1.0",
+  "Highlights": [
+    "Precision NTP time synchronization over Wi-Fi with automatic Sydney (AEST/AEDT) daylight saving adjustments",
+    "Real-time analog temperature telemetry using an NTC 10 kΩ thermistor calculated via the Steinhart–Hart equation",
+    "Interactive dual-axis analog joystick navigation featuring stateful page flipping (Off, Clock, Timer) and software debouncing",
+    "Configurable countdown timer with 5-minute increment controls, real-time LCD state rendering, and audible piezo buzzer alarms",
+    "Low-power standby state with dynamic LCD backlight modulation and non-blocking display buffer updates"
+  ],
   "Visibilty": true
 }
