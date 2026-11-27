@@ -5,6 +5,19 @@
 
 namespace Config {
 
+// Logging
+enum LogLevel : uint8_t {
+  LOG_LEVEL_DEBUG = 0,
+  LOG_LEVEL_INFO = 1,
+  LOG_LEVEL_WARN = 2,
+  LOG_LEVEL_ERROR = 3,
+  LOG_LEVEL_NONE = 4
+};
+
+constexpr LogLevel ACTIVE_LOG_LEVEL = LOG_LEVEL_DEBUG;
+constexpr unsigned long HEARTBEAT_INTERVAL_MS = 30000;
+constexpr unsigned long SENSOR_LOG_INTERVAL_MS = 15000;
+
 // Wi-Fi & NTP
 constexpr const char* TZ_SYDNEY = "AEST-10AEDT,M10.1.0/2,M4.1.0/3";
 constexpr const char* NTP_SERVER = "pool.ntp.org";
@@ -42,6 +55,19 @@ enum Page : int {
   PAGE_CLOCK = 1,
   PAGE_TIMER = 2
 };
+
+inline const char* pageName(int page) {
+  switch (page) {
+    case PAGE_OFF:
+      return "OFF";
+    case PAGE_CLOCK:
+      return "CLOCK";
+    case PAGE_TIMER:
+      return "TIMER";
+    default:
+      return "UNKNOWN";
+  }
+}
 
 constexpr int TOTAL_ACTIVE_PAGES = 2;
 constexpr unsigned long LOOP_DELAY_MS = 100;
