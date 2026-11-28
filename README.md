@@ -1,120 +1,102 @@
-# Multi-Functional Arduino Clock
+# Multi-Functional ESP32 Smart Clock & Rust Middleware
 
-An ESP32-based multifunctional clock that displays time, date, and temperature on a 16×2 LCD, with a built-in countdown timer — all controlled via a joystick.
+An ESP32-based smart desk clock, countdown timer, and milestone ("Doomsday") tracker powered by a **Rust middleware controller** (`middleware/`) over local LAN **MQTT** — featuring a **pixel-accurate 16×2 HD44780 Web Dashboard**, REST/WebSocket API, OpenClaw/AI agent sound triggers, daily & repeating automation schedules, and Docker Compose deployment.
 
 ![Clock Photo](https://res.cloudinary.com/dmj4ggkjq/image/upload/v1752665481/Arduino-Clock-1_nxzo2k.png)
 
+## Architecture
+
+- **Ubuntu / macOS Rust Middleware (`middleware/`, port `3032`)**
+  - Centralised state engine (`tokio`, `axum`, `rumqttc`, `chrono-tz`, `tracing-appender`)
+  - Computes 12h/24h clock & date (all IANA timezones), countdown timers, multi-target doomsday countdowns, and daily/interval automation schedules
+  - Serves a dark-mode Web Dashboard with a **pixel-accurate 5×8 × (16×2) HD44780 LCD Virtual Mirror** over live WebSockets (`/ws`)
+  - Exposes REST/JSON APIs including dedicated one-shot sound triggers (`/api/agent/sound`) for **OpenClaw & AI agents**
+  - Persists configuration/schedules to `middleware/data/state.json` and writes daily rotating logs to `middleware/logs/`
+  - Ready for remote access behind **`cloudflared`** with optional `CLOCK_API_TOKEN` Bearer auth
+- **Thin ESP32 Client (`src/`, target LAN IP `192.168.1.220`)**
+  - Connects to Wi-Fi and the LAN Mosquitto MQTT broker (`PubSubClient`)
+  - Renders pre-computed 16×2 LCD payloads and deduplicated one-shot piezo sound cues (`seq` tracking)
+  - Publishes debounced joystick events, NTC thermistor temperature readings (16-sample Steinhart–Hart + 0.5 °C hysteresis), and 10 s heartbeats with automatic Wi-Fi/MQTT/middleware reconnect recovery
+
 ## Features
 
-- **Off Page** — Turns off the LCD backlight to save power; use the joystick to wake to clock or timer.
-- **Real-Time Clock** — Syncs with NTP over Wi-Fi and displays the current time in 12-hour format (AM/PM) with the Sydney/AEST timezone.
-- **Date Display** — Shows the current date in `DD/MM/YYYY` format.
-- **Temperature Reading** — Reads ambient temperature from a thermistor (NTC 10 kΩ, β = 3950) and displays it in °C.
-- **Countdown Timer** — Set a timer in 5-minute increments using the joystick; a speaker beeps when the timer completes.
-- **Joystick Navigation** — Cycle through three pages (Off → Clock → Timer) with Y-axis tilts, and adjust timer values with the X-axis.
-- **Page Indicator** — Active pages show a `(1/2)` or `(2/2)` indicator on the LCD.
+- **4 Screen Modes** — `Off` (standby), `Clock` (12h/24h + °C/°F + all IANA timezones), `Timer` (configurable step increment & alarm cue), and `Doomsday` (multiple milestone countdowns with `Days & Hours` or `Days Only` format)
+- **Pixel-Accurate Web UI** — Live 16×2 HD44780 character matrix canvas, contextual screen-mode settings, MQTT latency & telemetry strip, timer pad, target manager, piezo sound cue triggers, and live event feed
+- **Automation Schedules** — Create, edit, toggle, and delete both fixed-time daily schedules (`HH:MM`) and custom repeating interval schedules (e.g., every 5, 10, 15, 30, or 60 minutes)
+- **Self-Healing Connectivity** — Two-way MQTT heartbeat & middleware-online handshake automatically resyncs the ESP32 after Docker restarts or Wi-Fi drops without rebooting the board
 
-## Hardware
+## Hardware & Pin Wiring
 
-| Component             | Details                          |
-|-----------------------|----------------------------------|
-| Microcontroller       | ESP32 DevKit v1                  |
-| Display               | 16×2 I2C LCD (address `0x27`)    |
-| Temperature Sensor    | NTC 10 kΩ Thermistor (β = 3950) |
-| Input                 | Two-axis analog joystick + button |
-| Audio                 | Piezo speaker / buzzer           |
-
-## Pin Wiring
-
-| Signal          | ESP32 Pin |
-|-----------------|-----------|
-| LCD SDA (I2C)   | GPIO 13   |
-| LCD SCL (I2C)   | GPIO 14   |
-| Joystick X-axis | GPIO 34   |
-| Joystick Y-axis | GPIO 35   |
-| Joystick Button | GPIO 32   |
-| Speaker         | GPIO 25   |
-| Thermistor      | GPIO 33   |
-
-## Dependencies
-
-Managed automatically by PlatformIO:
-
-| Library              | Source                                                        |
-|----------------------|---------------------------------------------------------------|
-| LiquidCrystal_I2C    | https://github.com/johnrickman/LiquidCrystal_I2C.git          |
-| NTPClient            | https://github.com/arduino-libraries/NTPClient.git             |
-
-Built-in ESP32/Arduino libraries: `WiFi`, `Wire`, `time`
+| Component | Details | ESP32 Pin |
+|---|---|---|
+| Microcontroller | ESP32 DevKit v1 | — |
+| Display (I2C) | 16×2 I2C LCD (`0x27`) | SDA: GPIO 13 · SCL: GPIO 14 |
+| Joystick | Dual-axis analog + button | X: GPIO 34 · Y: GPIO 35 · BTN: GPIO 32 |
+| Audio | Piezo speaker / buzzer (LEDC PWM) | GPIO 25 |
+| Temperature | NTC 10 kΩ Thermistor (β = 3950) | GPIO 33 |
 
 ## Project Structure
 
-```
-├── src/
-│   └── main.cpp            # Application source code
-├── include/
-│   └── secrets.h           # Wi-Fi credentials (not committed)
-├── platformio.ini           # PlatformIO build & dependency config
-├── PortfolioWebsiteInfo.json # Metadata for portfolio website
+```text
+├── src/                        # Thin ESP32 MQTT firmware (PlatformIO / C++)
+│   ├── config/config.h         # GPIO pinout, MQTT & timing constants
+│   ├── drivers/                # display, joystick, speaker, thermistor
+│   ├── services/mqtt_client.*  # Wi-Fi, PubSubClient, heartbeat & reconnect watchdog
+│   └── main.cpp                # Minimal hardware polling loop
+├── middleware/                 # Rust controller, Web UI, API & Docker stack
+│   ├── src/                    # main, config, state, clock, timer, doomsday, mqtt, api, ui, logger
+│   ├── mosquitto/mosquitto.conf
+│   ├── Dockerfile
+│   ├── docker-compose.yml
+│   └── README.md               # Detailed API, env vars & Ubuntu/cloudflared checklist
+├── platformio.ini              # ESP32 build & library dependencies
+├── PortfolioWebsiteInfo.json   # Portfolio metadata
 └── README.md
 ```
 
-## Getting Started
+## Quick Start
 
-### Prerequisites
+### 1. Run the Rust Middleware & Mosquitto (Docker — macOS & Ubuntu)
 
-- [PlatformIO](https://platformio.org/) (CLI or VS Code extension)
-- An ESP32 DevKit v1 board
-- Wi-Fi network
+```bash
+cd middleware
+docker compose up -d --build
+```
 
-### Setup
+Open the Web Dashboard at **`http://127.0.0.1:3032`** (or check `curl -s http://127.0.0.1:3032/health`).
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/JuhilKBhatt/Arduino-Clock.git
-   cd Arduino-Clock
-   ```
+### 2. Configure & Flash the ESP32
 
-2. **Create your Wi-Fi credentials file**
+Create `include/secrets.h` (not committed) with your Wi-Fi credentials and the LAN IP of the machine running Docker/Mosquitto:
 
-   Create `include/secrets.h` with your network details:
-   ```cpp
-   #ifndef SECRETS_H
-   #define SECRETS_H
+```cpp
+#ifndef SECRETS_H
+#define SECRETS_H
 
-   #define SECRET_SSID "YourWiFiSSID"
-   #define SECRET_PASS "YourWiFiPassword"
+#define SECRET_SSID "YourWiFiSSID"
+#define SECRET_PASS "YourWiFiPassword"
+#define MQTT_BROKER_HOST "192.168.1.150"
+// Optional: #define USE_STATIC_IP   // enforces 192.168.1.220
 
-   #endif
-   ```
+#endif
+```
 
-3. **Build and upload**
-   ```bash
-   pio run --target upload
-   ```
+Build and upload:
 
-4. **Monitor serial output**
-   ```bash
-   pio device monitor --baud 115200
-   ```
+```bash
+pio run --target upload
+pio device monitor --baud 115200
+```
 
-## Usage
+## Testing
 
-| Action                  | Joystick Input                |
-|-------------------------|-------------------------------|
-| Next page (Off→Clock→Timer) | Tilt Y-axis (one direction)  |
-| Previous page (Timer→Clock→Off) | Tilt Y-axis (other direction) |
-| Increase timer (+5 min) | Tilt X-axis left (Timer page) |
-| Decrease timer (−5 min) | Tilt X-axis right (Timer page) |
-| Start timer             | Press joystick button         |
+```bash
+# Rust middleware unit & API integration tests
+cd middleware && cargo test
 
-## How It Works
-
-1. On boot the ESP32 connects to Wi-Fi and syncs with `pool.ntp.org` using the `AEST-10AEDT` timezone string (Sydney time with automatic daylight saving transitions).
-2. **Page 0 (Off)** — The LCD backlight is turned off and the display is cleared. Tilt the joystick to navigate to an active page.
-3. **Page 1 (Clock)** — Displays `H:MM AM/PM  ##°C` on the first LCD line and `DD/MM/YYYY (1/2)` on the second.
-4. **Page 2 (Timer)** — Lets you set a countdown in 5-minute steps. Once started, it shows the remaining time. When it reaches zero, the speaker plays two sets of three beeps.
-5. Temperature is calculated from the thermistor's analog reading using the Steinhart–Hart equation.
+# ESP32 firmware build verification
+pio run
+```
 
 ## License
 

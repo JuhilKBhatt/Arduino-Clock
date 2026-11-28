@@ -1,17 +1,27 @@
 {
-  "title": "Multi-Functional Arduino Clock",
-  "description": "An ESP32-based multifunctional digital clock and countdown timer system featuring a 16×2 I2C LCD display, ambient temperature monitoring via an NTC thermistor, Wi-Fi NTP time synchronization for Sydney/AEST timezone, and two-axis analog joystick navigation.",
+  "title": "Multi-Functional ESP32 Smart Clock & Rust Middleware",
+  "description": "A distributed IoT desk clock and countdown system pairing a thin ESP32 MQTT client (16×2 I2C LCD, NTC thermistor, dual-axis joystick, piezo speaker) with a Dockerized Rust middleware controller (Axum, Tokio, rumqttc) featuring a pixel-accurate HD44780 Web Dashboard, REST/WebSocket API, AI agent sound triggers, and repeating automation schedules.",
   "techStack": {
+    "Frontend": [
+      "HTML5 Canvas",
+      "CSS3",
+      "JavaScript"
+    ],
     "Backend": [
+      "Rust",
       "C++",
       "ESP32"
     ],
-    "AI": [],
+    "AI": [
+      "OpenClaw Agent"
+    ],
     "DevSecOps": [
-      "Github"
+      "Docker",
+      "GitHub"
     ],
     "Test Automation": [
-      "Serial Monitor Telemetry"
+      "Cargo Unit & Integration Tests",
+      "PlatformIO Firmware Builds"
     ]
   },
   "liveDemo": "",
@@ -23,16 +33,16 @@
   ],
   "videoDemo": "",
   "Priority": 1,
-  "category": "Embedded",
+  "category": "Embedded & IoT",
   "type": "Solo",
-  "version": "Beta",
-  "versionNumber": "0.5.1",
+  "version": "prod",
+  "versionNumber": "1.0.0",
   "Highlights": [
-    "Precision NTP time synchronization over Wi-Fi with automatic Sydney (AEST/AEDT) daylight saving adjustments",
-    "Real-time analog temperature telemetry using an NTC 10 kΩ thermistor calculated via the Steinhart–Hart equation",
-    "Interactive dual-axis analog joystick navigation featuring stateful page flipping (Off, Clock, Timer) and software debouncing",
-    "Configurable countdown timer with 5-minute increment controls, real-time LCD state rendering, and audible piezo buzzer alarms",
-    "Low-power standby state with dynamic LCD backlight modulation and non-blocking display buffer updates"
+    "Centralised Rust middleware (Tokio + Axum + rumqttc) running in Docker alongside Mosquitto and cloudflared with daily rotating disk logs and JSON state persistence",
+    "Pixel-accurate 16×2 HD44780 virtual LCD mirror rendered via 5×8 character bitmaps over live WebSockets with contextual screen-mode variables",
+    "Thin ESP32 MQTT client with sequence-deduplicated display/audio dispatch, NTC thermistor Steinhart–Hart telemetry, debounced joystick input, and self-healing heartbeat auto-reconnect",
+    "Multi-target Doomsday milestone countdowns, configurable countdown timer, daily & custom-interval automation schedules, and OpenClaw / AI agent one-shot piezo sound trigger endpoints",
+    "Comprehensive automated test suite covering Rust clock/timer/doomsday/schedule logic, mock MQTT publishing, and REST API routes alongside PlatformIO firmware builds"
   ],
   "Visibilty": true
 }
