@@ -1,0 +1,35 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: esp32-clock-mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+
+  middleware:
+    build: .
+    container_name: esp32-clock-middleware
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+    ports:
+      - "3032:3032"
+    environment:
+      CLOCK_HTTP_HOST: "0.0.0.0"
+      CLOCK_HTTP_PORT: "3032"
+      CLOCK_ESP32_IP: "192.168.1.220"
+      CLOCK_MQTT_HOST: "mosquitto"
+      CLOCK_MQTT_PORT: "1883"
+      CLOCK_TIMEZONE: "Australia/Sydney"
+      CLOCK_LOG_DIR: "/app/logs"
+      CLOCK_STATE_FILE: "/app/data/state.json"
+      # CLOCK_API_TOKEN: "change-me"
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+
+volumes:
+  mosquitto_data:

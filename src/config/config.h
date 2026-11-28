@@ -2,25 +2,29 @@
 #define CONFIG_H
 
 #include <Arduino.h>
+#include <secrets.h>
 
 namespace Config {
 
-// Logging
-enum LogLevel : uint8_t {
-  LOG_LEVEL_DEBUG = 0,
-  LOG_LEVEL_INFO = 1,
-  LOG_LEVEL_WARN = 2,
-  LOG_LEVEL_ERROR = 3,
-  LOG_LEVEL_NONE = 4
-};
+// Network & MQTT (override in secrets.h if needed)
+#ifndef MQTT_BROKER_HOST
+#define MQTT_BROKER_HOST "192.168.1.100"
+#endif
+#ifndef MQTT_BROKER_PORT
+#define MQTT_BROKER_PORT 1883
+#endif
+#ifndef MQTT_TOPIC_PREFIX
+#define MQTT_TOPIC_PREFIX "esp32clock"
+#endif
 
-constexpr LogLevel ACTIVE_LOG_LEVEL = LOG_LEVEL_DEBUG;
-constexpr unsigned long HEARTBEAT_INTERVAL_MS = 30000;
-constexpr unsigned long SENSOR_LOG_INTERVAL_MS = 15000;
+constexpr const char* MQTT_HOST = MQTT_BROKER_HOST;
+constexpr uint16_t MQTT_PORT = MQTT_BROKER_PORT;
+constexpr const char* TOPIC_PREFIX = MQTT_TOPIC_PREFIX;
 
-// Wi-Fi & NTP
-constexpr const char* TZ_SYDNEY = "AEST-10AEDT,M10.1.0/2,M4.1.0/3";
-constexpr const char* NTP_SERVER = "pool.ntp.org";
+// Target ESP32 static IP (define USE_STATIC_IP in secrets.h to enforce 192.168.1.220)
+constexpr uint8_t STATIC_IP_BYTES[4] = {192, 168, 1, 220};
+constexpr uint8_t GATEWAY_BYTES[4] = {192, 168, 1, 1};
+constexpr uint8_t SUBNET_BYTES[4] = {255, 255, 255, 0};
 
 // I2C & LCD
 constexpr uint8_t I2C_SDA_PIN = 13;
@@ -49,31 +53,10 @@ constexpr float THERMISTOR_BETA = 3950.0f;
 constexpr float THERMISTOR_NOMINAL_TEMP_K = 25.0f + 273.15f;
 constexpr float THERMISTOR_HYSTERESIS_C = 0.5f;
 
-// Pages
-enum Page : int {
-  PAGE_OFF = 0,
-  PAGE_CLOCK = 1,
-  PAGE_TIMER = 2,
-  PAGE_DOOMSDAY = 3
-};
-
-inline const char* pageName(int page) {
-  switch (page) {
-    case PAGE_OFF:
-      return "OFF";
-    case PAGE_CLOCK:
-      return "CLOCK";
-    case PAGE_TIMER:
-      return "TIMER";
-    case PAGE_DOOMSDAY:
-      return "DOOMSDAY";
-    default:
-      return "UNKNOWN";
-  }
-}
-
-constexpr int TOTAL_ACTIVE_PAGES = 3;
-constexpr unsigned long LOOP_DELAY_MS = 100;
+// Timing
+constexpr unsigned long TEMP_PUBLISH_INTERVAL_MS = 15000;
+constexpr unsigned long MQTT_RECONNECT_INTERVAL_MS = 3000;
+constexpr unsigned long LOOP_DELAY_MS = 50;
 
 }  // namespace Config
 

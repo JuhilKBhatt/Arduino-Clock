@@ -1,16 +1,13 @@
 #ifndef JOYSTICK_H
 #define JOYSTICK_H
 
-struct JoystickReading {
-  int x;
-  int y;
-  bool buttonPressed;
-};
+#include <Arduino.h>
 
 /// Configures the joystick analog and button GPIO pins.
 void initJoystick();
 
-/// Samples the joystick axes and button state.
-JoystickReading readJoystick();
+/// Polls joystick axes & button with local debouncing and returns a semantic event name
+/// ("nav_next", "nav_prev", "action_inc", "action_dec", "button_press") or empty string.
+String pollJoystickEvent();
 
 #endif

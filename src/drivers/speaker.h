@@ -1,16 +1,13 @@
 #ifndef SPEAKER_H
 #define SPEAKER_H
 
+#include <Arduino.h>
+
 /// Configures the LEDC PWM channel for the piezo speaker.
 void initSpeaker();
 
-/// Plays a rising tone sequence when a timer starts.
-void playStartTone();
-
-/// Plays a falling tone sequence when a timer is cancelled.
-void playCancelTone();
-
-/// Plays two sets of three short beeps when a timer expires.
-void playTimerDoneBeeps();
+/// Plays a named one-shot sound cue ("start", "cancel", "done", "chime", "alert", "beep").
+/// Returns true if a valid cue was played.
+bool playSoundCue(const String& cue);
 
 #endif
