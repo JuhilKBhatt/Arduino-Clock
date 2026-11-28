@@ -6,6 +6,7 @@
 #include "drivers/joystick.h"
 #include "drivers/speaker.h"
 #include "pages/clock_page.h"
+#include "pages/doomsday_page.h"
 #include "pages/timer_page.h"
 #include "services/logger.h"
 #include "services/network_time.h"
@@ -22,10 +23,10 @@ unsigned long lastHeartbeatMs = 0;
 void updatePageNavigation() {
   JoystickReading joy = readJoystick();
 
-  // Tilt Y-axis to cycle through pages 0 -> 1 -> 2
+  // Tilt Y-axis to cycle through pages 0 -> 1 -> 2 -> 3
   if (joy.x < 2300 && joy.y < 100 && !joystickMoved) {
     int oldPage = currentPage;
-    currentPage = min(static_cast<int>(Config::PAGE_TIMER), currentPage + 1);
+    currentPage = min(static_cast<int>(Config::PAGE_DOOMSDAY), currentPage + 1);
     joystickMoved = true;
     if (currentPage != oldPage) {
       LOG_INFO(TAG, "Page navigation: %s (%d) -> %s (%d) [joy x=%d, y=%d]",
@@ -83,6 +84,7 @@ void setup() {
   initDisplay();
   initJoystick();
   initSpeaker();
+  initDoomsdayPage();
 
   lastHeartbeatMs = millis();
   LOG_INFO(TAG, "System setup completed in %lu ms — starting on %s page",
@@ -104,6 +106,10 @@ void loop() {
     case Config::PAGE_TIMER:
       setDisplayBacklight(true);
       renderTimerPage();
+      break;
+    case Config::PAGE_DOOMSDAY:
+      setDisplayBacklight(true);
+      renderDoomsdayPage();
       break;
   }
 

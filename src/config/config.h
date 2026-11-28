@@ -53,7 +53,8 @@ constexpr float THERMISTOR_HYSTERESIS_C = 0.5f;
 enum Page : int {
   PAGE_OFF = 0,
   PAGE_CLOCK = 1,
-  PAGE_TIMER = 2
+  PAGE_TIMER = 2,
+  PAGE_DOOMSDAY = 3
 };
 
 inline const char* pageName(int page) {
@@ -64,12 +65,14 @@ inline const char* pageName(int page) {
       return "CLOCK";
     case PAGE_TIMER:
       return "TIMER";
+    case PAGE_DOOMSDAY:
+      return "DOOMSDAY";
     default:
       return "UNKNOWN";
   }
 }
 
-constexpr int TOTAL_ACTIVE_PAGES = 2;
+constexpr int TOTAL_ACTIVE_PAGES = 3;
 constexpr unsigned long LOOP_DELAY_MS = 100;
 
 }  // namespace Config

@@ -1,6 +1,7 @@
 #include "logger.h"
 
 #include <Arduino.h>
+#include <esp_system.h>
 #include <stdarg.h>
 #include <stdio.h>
 
@@ -18,6 +19,52 @@ const char* levelToString(Config::LogLevel level) {
       return "ERROR";
     default:
       return "LOG  ";
+  }
+}
+
+const char* flashModeName(FlashMode_t mode) {
+  switch (mode) {
+    case FM_QIO:
+      return "QIO";
+    case FM_QOUT:
+      return "QOUT";
+    case FM_DIO:
+      return "DIO";
+    case FM_DOUT:
+      return "DOUT";
+    case FM_FAST_READ:
+      return "FAST_READ";
+    case FM_SLOW_READ:
+      return "SLOW_READ";
+    default:
+      return "UNKNOWN";
+  }
+}
+
+const char* resetReasonName(esp_reset_reason_t reason) {
+  switch (reason) {
+    case ESP_RST_POWERON:
+      return "POWERON";
+    case ESP_RST_EXT:
+      return "EXT_PIN";
+    case ESP_RST_SW:
+      return "SOFTWARE";
+    case ESP_RST_PANIC:
+      return "PANIC";
+    case ESP_RST_INT_WDT:
+      return "INT_WDT";
+    case ESP_RST_TASK_WDT:
+      return "TASK_WDT";
+    case ESP_RST_WDT:
+      return "OTHER_WDT";
+    case ESP_RST_DEEPSLEEP:
+      return "DEEPSLEEP";
+    case ESP_RST_BROWNOUT:
+      return "BROWNOUT";
+    case ESP_RST_SDIO:
+      return "SDIO";
+    default:
+      return "UNKNOWN";
   }
 }
 
@@ -50,9 +97,45 @@ void logBootBanner() {
   Serial.println("============================================================");
   Serial.println("             Multi-Functional ESP32 Clock Boot              ");
   Serial.println("============================================================");
-  LOG_INFO("SYS", "Chip: %s (rev %d), Cores: %d, CPU: %u MHz",
+
+  // Compute & chip specs
+  uint64_t chipId = ESP.getEfuseMac();
+  LOG_INFO("COMPUTE", "Chip: %s (rev %d), Cores: %d, Chip ID: %04X%08X",
            ESP.getChipModel(), ESP.getChipRevision(), ESP.getChipCores(),
-           ESP.getCpuFreqMHz());
-  LOG_INFO("SYS", "SDK: %s | Flash: %u KB | Free Heap: %u bytes",
-           ESP.getSdkVersion(), ESP.getFlashChipSize() / 1024U, ESP.getFreeHeap());
+           static_cast<uint16_t>(chipId >> 32),
+           static_cast<uint32_t>(chipId));
+  LOG_INFO("COMPUTE", "CPU: %u MHz | XTAL: %u MHz | APB: %u MHz",
+           ESP.getCpuFreqMHz(), getXtalFrequencyMhz(),
+           getApbFrequency() / 1000000U);
+  LOG_INFO("SYS", "SDK: %s | Reset Reason: %s | Build: %s %s",
+           ESP.getSdkVersion(), resetReasonName(esp_reset_reason()),
+           __DATE__, __TIME__);
+
+  // RAM & PSRAM specs
+  uint32_t totalHeap = ESP.getHeapSize();
+  uint32_t freeHeap = ESP.getFreeHeap();
+  LOG_INFO("MEMORY", "RAM: %u / %u B free (%.1f%% free) | Max Alloc: %u B | Min Free: %u B",
+           freeHeap, totalHeap,
+           totalHeap > 0 ? (100.0f * freeHeap / totalHeap) : 0.0f,
+           ESP.getMaxAllocHeap(), ESP.getMinFreeHeap());
+  if (ESP.getPsramSize() > 0) {
+    LOG_INFO("MEMORY", "PSRAM: %u / %u B free",
+             ESP.getFreePsram(), ESP.getPsramSize());
+  } else {
+    LOG_INFO("MEMORY", "PSRAM: Not present");
+  }
+
+  // Flash & sketch storage specs
+  uint32_t sketchUsed = ESP.getSketchSize();
+  uint32_t sketchFree = ESP.getFreeSketchSpace();
+  uint32_t sketchTotal = sketchUsed + sketchFree;
+  LOG_INFO("STORAGE", "Flash: %u KB (%u MB) @ %u MHz (%s mode)",
+           ESP.getFlashChipSize() / 1024U,
+           ESP.getFlashChipSize() / (1024U * 1024U),
+           ESP.getFlashChipSpeed() / 1000000U,
+           flashModeName(ESP.getFlashChipMode()));
+  LOG_INFO("STORAGE", "Sketch: %u / %u B used (%.1f%%), %u B free | MD5: %s",
+           sketchUsed, sketchTotal,
+           sketchTotal > 0 ? (100.0f * sketchUsed / sketchTotal) : 0.0f,
+           sketchFree, ESP.getSketchMD5().c_str());
 }
