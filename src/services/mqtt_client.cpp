@@ -14,11 +14,14 @@ WiFiClient wifiClient;
 PubSubClient mqtt(wifiClient);
 
 unsigned long lastReconnectAttemptMs = 0;
+unsigned long lastWifiReconnectAttemptMs = 0;
+unsigned long lastHeartbeatMs = 0;
 unsigned long lastDisplaySeq = 0;
 unsigned long lastSoundSeq = 0;
 
 String topicDisplayCmd() { return String(Config::TOPIC_PREFIX) + "/display/cmd"; }
 String topicSoundCmd() { return String(Config::TOPIC_PREFIX) + "/sound/cmd"; }
+String topicMiddlewareStatus() { return String(Config::TOPIC_PREFIX) + "/middleware/status"; }
 String topicSensorTemp() { return String(Config::TOPIC_PREFIX) + "/sensor/temp"; }
 String topicInputEvent() { return String(Config::TOPIC_PREFIX) + "/input/event"; }
 String topicSpeakerStatus() { return String(Config::TOPIC_PREFIX) + "/speaker/status"; }
@@ -55,6 +58,13 @@ void publishSpeakerStatus(const String& cue) {
   mqtt.publish(topicSpeakerStatus().c_str(), payload.c_str());
 }
 
+bool publishOnlineStatus() {
+  if (!mqtt.connected()) return false;
+  String payload = "{\"online\":true,\"ip\":\"" + WiFi.localIP().toString() +
+                   "\",\"rssi\":" + String(WiFi.RSSI()) + "}";
+  return mqtt.publish(topicSystemStatus().c_str(), payload.c_str(), true);
+}
+
 void onMqttMessage(char* topic, byte* payload, unsigned int length) {
   String msg;
   msg.reserve(length + 1);
@@ -63,6 +73,17 @@ void onMqttMessage(char* topic, byte* payload, unsigned int length) {
   }
 
   String t(topic);
+  if (t == topicMiddlewareStatus()) {
+    if (msg == "online") {
+      Serial.println("[MQTT] Middleware online — resetting seq & sending heartbeat");
+      lastDisplaySeq = 0;
+      lastSoundSeq = 0;
+      publishOnlineStatus();
+      lastHeartbeatMs = millis();
+    }
+    return;
+  }
+
   if (t == topicDisplayCmd()) {
     unsigned long seq = static_cast<unsigned long>(extractJsonLong(msg, "seq", 0));
     if (seq != 0 && seq <= lastDisplaySeq) {
@@ -95,12 +116,6 @@ void onMqttMessage(char* topic, byte* payload, unsigned int length) {
   }
 }
 
-void publishOnlineStatus() {
-  String payload = "{\"online\":true,\"ip\":\"" + WiFi.localIP().toString() +
-                   "\",\"rssi\":" + String(WiFi.RSSI()) + "}";
-  mqtt.publish(topicSystemStatus().c_str(), payload.c_str(), true);
-}
-
 bool reconnectMqtt() {
   String clientId = "esp32-clock-" + WiFi.macAddress();
   String lwtTopic = topicSystemStatus();
@@ -109,9 +124,13 @@ bool reconnectMqtt() {
   Serial.printf("[MQTT] Connecting to %s:%u...\n", Config::MQTT_HOST, Config::MQTT_PORT);
   if (mqtt.connect(clientId.c_str(), lwtTopic.c_str(), 1, true, lwtPayload)) {
     Serial.println("[MQTT] Connected to broker");
+    lastDisplaySeq = 0;
+    lastSoundSeq = 0;
     mqtt.subscribe(topicDisplayCmd().c_str(), 1);
     mqtt.subscribe(topicSoundCmd().c_str(), 1);
+    mqtt.subscribe(topicMiddlewareStatus().c_str(), 1);
     publishOnlineStatus();
+    lastHeartbeatMs = millis();
     return true;
   }
 
@@ -123,6 +142,7 @@ bool reconnectMqtt() {
 
 void initNetworkAndMqtt() {
   WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
 
 #ifdef USE_STATIC_IP
   IPAddress ip(Config::STATIC_IP_BYTES[0], Config::STATIC_IP_BYTES[1],
@@ -149,19 +169,44 @@ void initNetworkAndMqtt() {
   mqtt.setServer(Config::MQTT_HOST, Config::MQTT_PORT);
   mqtt.setCallback(onMqttMessage);
   mqtt.setBufferSize(512);
+  mqtt.setKeepAlive(10);
+  mqtt.setSocketTimeout(5);
   reconnectMqtt();
 }
 
 void loopMqtt() {
+  unsigned long now = millis();
+
+  // Wi-Fi watchdog: reconnect if Wi-Fi dropped
+  if (WiFi.status() != WL_CONNECTED) {
+    if (now - lastWifiReconnectAttemptMs >= Config::WIFI_RECONNECT_INTERVAL_MS) {
+      lastWifiReconnectAttemptMs = now;
+      Serial.println("[WIFI] Connection lost — reconnecting...");
+      WiFi.disconnect();
+      WiFi.begin(SECRET_SSID, SECRET_PASS);
+    }
+    return;
+  }
+
+  // MQTT watchdog: reconnect if broker dropped
   if (!mqtt.connected()) {
-    unsigned long now = millis();
     if (now - lastReconnectAttemptMs >= Config::MQTT_RECONNECT_INTERVAL_MS) {
       lastReconnectAttemptMs = now;
       reconnectMqtt();
     }
     return;
   }
+
   mqtt.loop();
+
+  // Periodic heartbeat: verifies live TCP/MQTT session and keeps middleware synced
+  if (now - lastHeartbeatMs >= Config::HEARTBEAT_INTERVAL_MS) {
+    lastHeartbeatMs = now;
+    if (!publishOnlineStatus()) {
+      Serial.println("[MQTT] Heartbeat publish failed — forcing reconnect");
+      mqtt.disconnect();
+    }
+  }
 }
 
 void publishTemperature(float tempC) {

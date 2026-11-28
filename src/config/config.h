@@ -55,7 +55,9 @@ constexpr float THERMISTOR_HYSTERESIS_C = 0.5f;
 
 // Timing
 constexpr unsigned long TEMP_PUBLISH_INTERVAL_MS = 15000;
+constexpr unsigned long HEARTBEAT_INTERVAL_MS = 10000;
 constexpr unsigned long MQTT_RECONNECT_INTERVAL_MS = 3000;
+constexpr unsigned long WIFI_RECONNECT_INTERVAL_MS = 5000;
 constexpr unsigned long LOOP_DELAY_MS = 50;
 
 }  // namespace Config

@@ -35,7 +35,8 @@ async fn main() {
     let state = Arc::new(RwLock::new(AppState::load_or_init(&cfg)));
     let (ws_tx, _) = broadcast::channel(64);
     let (mqtt_client, eventloop) = create_mqtt_client(&cfg);
-    let publisher: Arc<dyn MqttPublisher> = Arc::new(RumqttcPublisher::new(mqtt_client.clone(), &cfg));
+    let publisher: Arc<dyn MqttPublisher> =
+        Arc::new(RumqttcPublisher::new(mqtt_client.clone(), &cfg, state.clone()));
 
     // Spawn MQTT event loop
     tokio::spawn(run_mqtt_loop(
@@ -59,9 +60,19 @@ async fn main() {
                 let now = Utc::now();
                 let (cmd, snap, changed) = {
                     let mut guard = state.write().await;
+                    let mut watchdog_changed = false;
+                    if guard.esp32.online {
+                        if let Some(last_seen) = guard.esp32.last_seen {
+                            if (now - last_seen).num_seconds() > 30 {
+                                warn!("ESP32 heartbeat timeout (>30s) — marking offline");
+                                guard.esp32.online = false;
+                                watchdog_changed = true;
+                            }
+                        }
+                    }
                     let triggered = guard.tick(now).is_some();
                     let cmd = guard.take_display_command(now, false);
-                    let changed = triggered || cmd.is_some();
+                    let changed = watchdog_changed || triggered || cmd.is_some();
                     let snap = if changed {
                         Some(guard.snapshot(now))
                     } else {

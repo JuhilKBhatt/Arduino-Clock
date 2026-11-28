@@ -17,6 +17,7 @@ impl DoomsdayTarget {
         total: usize,
         now_utc: DateTime<Utc>,
         tz_name: &str,
+        days_only: bool,
     ) -> (String, String) {
         let header = if total > 1 {
             let idx_tag = format!(" [{}/{}]", index + 1, total);
@@ -56,7 +57,11 @@ impl DoomsdayTarget {
             let secs = diff_secs % 60;
 
             if days > 0 {
-                format!("{}d {}h", days, hours)
+                if days_only {
+                    format!("{} days", days)
+                } else {
+                    format!("{}d {}h", days, hours)
+                }
             } else if hours > 0 {
                 format!("{}h {}m", hours, mins)
             } else {
@@ -81,20 +86,20 @@ mod tests {
             day: 1,
         };
 
-        // 2026-12-30 13:00:00 UTC == 2026-12-31 00:00:00 AEDT (1 day before)
         let one_day_before = Utc.with_ymd_and_hms(2026, 12, 30, 13, 0, 0).unwrap();
-        let (l1, l2) = target.format_lines(0, 2, one_day_before, "Australia/Sydney");
+        let (l1, l2) = target.format_lines(0, 2, one_day_before, "Australia/Sydney", false);
         assert_eq!(l1, "Doomsday [1/2]");
         assert_eq!(l2, "1d 0h");
 
-        // 2026-12-31 15:00:00 UTC == 2027-01-01 02:00:00 AEDT (same calendar day)
+        let (_, l2_days_only) = target.format_lines(0, 2, one_day_before, "Australia/Sydney", true);
+        assert_eq!(l2_days_only, "1 days");
+
         let same_day = Utc.with_ymd_and_hms(2026, 12, 31, 15, 0, 0).unwrap();
-        let (_, l2_today) = target.format_lines(0, 1, same_day, "Australia/Sydney");
+        let (_, l2_today) = target.format_lines(0, 1, same_day, "Australia/Sydney", false);
         assert_eq!(l2_today, "TODAY!");
 
-        // 2027-01-03 13:00:00 UTC == 2027-01-04 00:00:00 AEDT (3 days after)
         let three_days_after = Utc.with_ymd_and_hms(2027, 1, 3, 13, 0, 0).unwrap();
-        let (_, l2_past) = target.format_lines(0, 1, three_days_after, "Australia/Sydney");
+        let (_, l2_past) = target.format_lines(0, 1, three_days_after, "Australia/Sydney", false);
         assert_eq!(l2_past, "3d ago");
     }
 }

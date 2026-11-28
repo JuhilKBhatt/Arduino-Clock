@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use chrono::Utc;
@@ -21,14 +21,16 @@ pub struct RumqttcPublisher {
     client: AsyncClient,
     display_topic: String,
     sound_topic: String,
+    state: Arc<RwLock<AppState>>,
 }
 
 impl RumqttcPublisher {
-    pub fn new(client: AsyncClient, cfg: &AppConfig) -> Self {
+    pub fn new(client: AsyncClient, cfg: &AppConfig, state: Arc<RwLock<AppState>>) -> Self {
         Self {
             client,
             display_topic: cfg.display_cmd_topic(),
             sound_topic: cfg.sound_cmd_topic(),
+            state,
         }
     }
 }
@@ -37,19 +39,26 @@ impl RumqttcPublisher {
 impl MqttPublisher for RumqttcPublisher {
     async fn publish_display(&self, cmd: &DisplayCommand) -> Result<(), String> {
         let payload = serde_json::to_string(cmd).map_err(|e| e.to_string())?;
-        // Retain latest display state (without one-shot sound) or QoS 1 so ESP32 gets latest screen
+        let started = Instant::now();
         self.client
             .publish(&self.display_topic, QoS::AtLeastOnce, false, payload)
             .await
-            .map_err(|e| e.to_string())
+            .map_err(|e| e.to_string())?;
+        let elapsed_ms = started.elapsed().as_millis() as u64;
+        self.state.write().await.mqtt_latency_ms = Some(elapsed_ms);
+        Ok(())
     }
 
     async fn publish_sound(&self, cmd: &SoundCommand) -> Result<(), String> {
         let payload = serde_json::to_string(cmd).map_err(|e| e.to_string())?;
+        let started = Instant::now();
         self.client
             .publish(&self.sound_topic, QoS::AtLeastOnce, false, payload)
             .await
-            .map_err(|e| e.to_string())
+            .map_err(|e| e.to_string())?;
+        let elapsed_ms = started.elapsed().as_millis() as u64;
+        self.state.write().await.mqtt_latency_ms = Some(elapsed_ms);
+        Ok(())
     }
 }
 
@@ -105,9 +114,21 @@ pub async fn run_mqtt_loop(
     let input_topic = cfg.input_event_topic();
     let speaker_topic = cfg.speaker_status_topic();
     let status_topic = cfg.device_status_topic();
+    let mut last_ping_sent: Option<Instant> = None;
 
     loop {
         match eventloop.poll().await {
+            Ok(Event::Outgoing(rumqttc::Outgoing::PingReq)) => {
+                last_ping_sent = Some(Instant::now());
+            }
+            Ok(Event::Incoming(Incoming::PingResp)) => {
+                if let Some(sent) = last_ping_sent.take() {
+                    let rtt_ms = sent.elapsed().as_millis() as u64;
+                    let mut guard = state.write().await;
+                    guard.mqtt_latency_ms = Some(rtt_ms);
+                    let _ = ws_tx.send(guard.snapshot(Utc::now()));
+                }
+            }
             Ok(Event::Incoming(Incoming::ConnAck(_))) => {
                 info!(
                     "Connected to MQTT broker at {}:{}",
@@ -125,6 +146,15 @@ pub async fn run_mqtt_loop(
                     } else {
                         debug!("Subscribed to {}", topic);
                     }
+                }
+
+                // Announce middleware is online so any already-connected ESP32 resets its seq & re-syncs
+                let mw_status_topic = format!("{}/middleware/status", cfg.mqtt_topic_prefix);
+                if let Err(err) = client
+                    .publish(&mw_status_topic, QoS::AtLeastOnce, true, "online")
+                    .await
+                {
+                    warn!("Failed to publish middleware online status: {}", err);
                 }
             }
             Ok(Event::Incoming(Incoming::Publish(msg))) => {
@@ -206,6 +236,7 @@ pub async fn run_mqtt_loop(
                     let mut guard = state.write().await;
                     if guard.mqtt_connected {
                         guard.mqtt_connected = false;
+                        guard.mqtt_latency_ms = None;
                         let _ = ws_tx.send(guard.snapshot(Utc::now()));
                     }
                 }

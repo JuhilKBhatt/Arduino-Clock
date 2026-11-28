@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{Html, IntoResponse};
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use chrono::Utc;
 use futures_util::StreamExt;
@@ -39,6 +39,7 @@ pub fn build_router(ctx: ApiContext) -> Router {
         .route("/api/sound", post(trigger_sound))
         .route("/api/agent/sound", post(trigger_sound))
         .route("/api/schedules", get(list_schedules).post(upsert_schedule))
+        .route("/api/schedules/:id", delete(delete_schedule))
         .route("/ws", get(ws_handler))
         .layer(CorsLayer::permissive())
         .with_state(ctx)
@@ -86,6 +87,7 @@ struct HealthResponse {
     esp32_ip: String,
     esp32_online: bool,
     mqtt_connected: bool,
+    mqtt_latency_ms: Option<u64>,
 }
 
 async fn health_check(State(ctx): State<ApiContext>) -> Json<HealthResponse> {
@@ -95,6 +97,7 @@ async fn health_check(State(ctx): State<ApiContext>) -> Json<HealthResponse> {
         esp32_ip: guard.esp32.ip.clone(),
         esp32_online: guard.esp32.online,
         mqtt_connected: guard.mqtt_connected,
+        mqtt_latency_ms: guard.mqtt_latency_ms,
     })
 }
 
@@ -157,7 +160,10 @@ async fn control_timer(
     {
         let mut guard = ctx.state.write().await;
         match req.action.as_str() {
-            "adjust" => guard.timer.adjust_minutes(req.delta.unwrap_or(5)),
+            "adjust" => {
+                let default_step = guard.persisted.timer_step_minutes as i32;
+                guard.timer.adjust_minutes(req.delta.unwrap_or(default_step));
+            }
             "set" => guard.timer.set_minutes(req.minutes.unwrap_or(0)),
             "start" => {
                 if guard.timer.start(now) {
@@ -237,6 +243,11 @@ struct VariablesRequest {
     backlight: Option<bool>,
     brightness: Option<u8>,
     timezone: Option<String>,
+    clock_24h: Option<bool>,
+    temp_unit: Option<String>,
+    timer_step_minutes: Option<u32>,
+    timer_done_sound: Option<SoundCue>,
+    doomsday_days_only: Option<bool>,
 }
 
 async fn update_variables(
@@ -258,6 +269,30 @@ async fn update_variables(
                 return Err(StatusCode::BAD_REQUEST);
             }
             guard.persisted.timezone = tz;
+        }
+        if let Some(c24) = req.clock_24h {
+            guard.persisted.clock_24h = c24;
+        }
+        if let Some(unit) = req.temp_unit {
+            if unit != "C" && unit != "F" {
+                return Err(StatusCode::BAD_REQUEST);
+            }
+            guard.persisted.temp_unit = unit;
+        }
+        if let Some(step) = req.timer_step_minutes {
+            if step == 0 || step > 60 {
+                return Err(StatusCode::BAD_REQUEST);
+            }
+            guard.persisted.timer_step_minutes = step;
+        }
+        if let Some(snd) = req.timer_done_sound {
+            if snd == SoundCue::None {
+                return Err(StatusCode::BAD_REQUEST);
+            }
+            guard.persisted.timer_done_sound = snd;
+        }
+        if let Some(days_only) = req.doomsday_days_only {
+            guard.persisted.doomsday_days_only = days_only;
         }
         guard.save_persisted();
     }
@@ -319,9 +354,14 @@ async fn list_schedules(State(ctx): State<ApiContext>) -> Json<Vec<ScheduleRule>
 async fn upsert_schedule(
     State(ctx): State<ApiContext>,
     headers: HeaderMap,
-    Json(rule): Json<ScheduleRule>,
+    Json(mut rule): Json<ScheduleRule>,
 ) -> Result<Json<Vec<ScheduleRule>>, StatusCode> {
     check_auth(&ctx.cfg, &headers)?;
+    if let Some(rm) = rule.repeat_minutes {
+        if rm == 0 {
+            rule.repeat_minutes = None;
+        }
+    }
     let schedules = {
         let mut guard = ctx.state.write().await;
         if let Some(existing) = guard
@@ -335,6 +375,27 @@ async fn upsert_schedule(
             guard.persisted.schedules.push(rule);
         }
         guard.save_persisted();
+        let _ = ctx.ws_tx.send(guard.snapshot(Utc::now()));
+        guard.persisted.schedules.clone()
+    };
+    Ok(Json(schedules))
+}
+
+async fn delete_schedule(
+    State(ctx): State<ApiContext>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<ScheduleRule>>, StatusCode> {
+    check_auth(&ctx.cfg, &headers)?;
+    let schedules = {
+        let mut guard = ctx.state.write().await;
+        let before = guard.persisted.schedules.len();
+        guard.persisted.schedules.retain(|r| r.id != id);
+        if guard.persisted.schedules.len() == before {
+            return Err(StatusCode::NOT_FOUND);
+        }
+        guard.save_persisted();
+        let _ = ctx.ws_tx.send(guard.snapshot(Utc::now()));
         guard.persisted.schedules.clone()
     };
     Ok(Json(schedules))
@@ -475,6 +536,41 @@ mod tests {
         assert_eq!(published.len(), 1);
         assert_eq!(published[0].snd, SoundCue::Chime);
         assert_eq!(published[0].source.as_deref(), Some("openclaw"));
+    }
+
+    #[tokio::test]
+    async fn schedule_upsert_and_delete_work() {
+        let dir = tempdir().unwrap();
+        let (ctx, _) = test_ctx(&dir);
+        let app = build_router(ctx);
+
+        let add_res = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/schedules")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"id":"s1","label":"Break","hour":0,"minute":0,"repeat_minutes":15,"sound":"chime","enabled":true}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(add_res.status(), StatusCode::OK);
+
+        let del_res = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/api/schedules/s1")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(del_res.status(), StatusCode::OK);
     }
 
     #[tokio::test]

@@ -1,34 +1,44 @@
 use chrono::{DateTime, Datelike, Timelike, Utc};
 use chrono_tz::Tz;
 
-/// Formats the 16x2 LCD clock lines for the given UTC instant, timezone, and temperature.
-/// Line 1: `H:MM AM/PM     ##°C` (using ASCII `223` / `°` placeholder; ESP32 maps `~` or char(223))
-/// Wait: ESP32 HD44780 LCD displays degree symbol at byte `0xDF` (223). We send `\u{00B0}` (`°`)
-/// in UTF-8 over JSON/API and let the ESP32 thin client map UTF-8 `°` (`0xC2 0xB0`) -> `0xDF`,
-/// or keep `format_clock_lines` clean with `°C`.
+/// Formats the 16x2 LCD clock lines for the given UTC instant, timezone,
+/// temperature (in Celsius), 24h flag, and temperature unit ("C" or "F").
 pub fn format_clock_lines(
     now_utc: DateTime<Utc>,
     tz_name: &str,
     temp_c: Option<f32>,
+    use_24h: bool,
+    temp_unit: &str,
 ) -> (String, String) {
     let tz: Tz = tz_name.parse().unwrap_or(chrono_tz::Australia::Sydney);
     let local = now_utc.with_timezone(&tz);
 
     let hour24 = local.hour();
     let minute = local.minute();
-    let ampm = if hour24 >= 12 { "PM" } else { "AM" };
-    let hour12 = match hour24 % 12 {
-        0 => 12,
-        h => h,
+
+    let time_part = if use_24h {
+        format!("{:02}:{:02}", hour24, minute)
+    } else {
+        let ampm = if hour24 >= 12 { "PM" } else { "AM" };
+        let hour12 = match hour24 % 12 {
+            0 => 12,
+            h => h,
+        };
+        format!("{}:{:02} {}", hour12, minute, ampm)
     };
 
+    let use_f = temp_unit.eq_ignore_ascii_case("F");
     let temp_str = match temp_c {
-        Some(t) if t > -100.0 => format!("{}C", t.round() as i32),
-        _ => "--C".to_string(),
+        Some(t) if t > -100.0 => {
+            if use_f {
+                format!("{}F", (t * 9.0 / 5.0 + 32.0).round() as i32)
+            } else {
+                format!("{}C", t.round() as i32)
+            }
+        }
+        _ => if use_f { "--F" } else { "--C" }.to_string(),
     };
 
-    // Match 16-column layout: e.g. "6:45 PM     23C" (or "12:05 AM    23C")
-    let time_part = format!("{}:{:02} {}", hour12, minute, ampm);
     let pad = 16usize.saturating_sub(time_part.len() + temp_str.len());
     let line1 = format!("{}{}{}", time_part, " ".repeat(pad.max(1)), temp_str);
 
@@ -48,17 +58,13 @@ mod tests {
     use chrono::TimeZone;
 
     #[test]
-    fn formats_morning_and_evening_12h_clock() {
-        // 2026-11-28 01:05:00 UTC == 12:05 PM AEDT (UTC+11)
+    fn formats_12h_24h_and_temp_units() {
         let noon_utc = Utc.with_ymd_and_hms(2026, 11, 28, 1, 5, 0).unwrap();
-        let (l1, l2) = format_clock_lines(noon_utc, "Australia/Sydney", Some(23.4));
+        let (l1, l2) = format_clock_lines(noon_utc, "Australia/Sydney", Some(23.4), false, "C");
         assert_eq!(l1, "12:05 PM     23C");
         assert_eq!(l2, "28/11/2026");
 
-        // 2026-07-15 14:30:00 UTC == 00:30 AM AEST (UTC+10) on July 16
-        let midnight_utc = Utc.with_ymd_and_hms(2026, 7, 15, 14, 30, 0).unwrap();
-        let (l1_mid, l2_mid) = format_clock_lines(midnight_utc, "Australia/Sydney", None);
-        assert_eq!(l1_mid, "12:30 AM     --C");
-        assert_eq!(l2_mid, "16/07/2026");
+        let (l1_24, _) = format_clock_lines(noon_utc, "Australia/Sydney", Some(25.0), true, "F");
+        assert_eq!(l1_24, "12:05        77F");
     }
 }

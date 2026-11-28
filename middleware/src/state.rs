@@ -104,12 +104,19 @@ pub struct SoundCommand {
 pub struct ScheduleRule {
     pub id: String,
     pub label: String,
+    #[serde(default)]
     pub hour: u32,
+    #[serde(default)]
     pub minute: u32,
+    /// When Some(n) with n > 0, repeats every `n` minutes instead of daily at hour:minute.
+    #[serde(default)]
+    pub repeat_minutes: Option<u32>,
     pub sound: SoundCue,
     pub enabled: bool,
     #[serde(default)]
     pub last_triggered_date: Option<NaiveDate>,
+    #[serde(default)]
+    pub last_triggered_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,12 +132,32 @@ pub struct Esp32Telemetry {
     pub last_seen: Option<DateTime<Utc>>,
 }
 
+fn default_temp_unit() -> String {
+    "C".to_string()
+}
+fn default_timer_step() -> u32 {
+    5
+}
+fn default_timer_done_sound() -> SoundCue {
+    SoundCue::Done
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersistedState {
     pub active_page: Page,
     pub backlight: bool,
     pub brightness: u8,
     pub timezone: String,
+    #[serde(default)]
+    pub clock_24h: bool,
+    #[serde(default = "default_temp_unit")]
+    pub temp_unit: String,
+    #[serde(default = "default_timer_step")]
+    pub timer_step_minutes: u32,
+    #[serde(default = "default_timer_done_sound")]
+    pub timer_done_sound: SoundCue,
+    #[serde(default)]
+    pub doomsday_days_only: bool,
     pub doomsday_targets: Vec<DoomsdayTarget>,
     pub selected_doomsday_index: usize,
     pub schedules: Vec<ScheduleRule>,
@@ -143,6 +170,11 @@ impl PersistedState {
             backlight: true,
             brightness: 255,
             timezone: tz.to_string(),
+            clock_24h: false,
+            temp_unit: "C".to_string(),
+            timer_step_minutes: 5,
+            timer_done_sound: SoundCue::Done,
+            doomsday_days_only: false,
             doomsday_targets: vec![
                 DoomsdayTarget {
                     label: "Doomsday".to_string(),
@@ -171,6 +203,11 @@ pub struct StateSnapshot {
     pub backlight: bool,
     pub brightness: u8,
     pub timezone: String,
+    pub clock_24h: bool,
+    pub temp_unit: String,
+    pub timer_step_minutes: u32,
+    pub timer_done_sound: SoundCue,
+    pub doomsday_days_only: bool,
     pub timer: TimerState,
     pub timer_remaining_seconds: u64,
     pub doomsday_targets: Vec<DoomsdayTarget>,
@@ -178,6 +215,7 @@ pub struct StateSnapshot {
     pub schedules: Vec<ScheduleRule>,
     pub esp32: Esp32Telemetry,
     pub mqtt_connected: bool,
+    pub mqtt_latency_ms: Option<u64>,
     pub display_seq: u64,
     pub sound_seq: u64,
     pub timestamp: DateTime<Utc>,
@@ -188,6 +226,7 @@ pub struct AppState {
     pub timer: TimerState,
     pub esp32: Esp32Telemetry,
     pub mqtt_connected: bool,
+    pub mqtt_latency_ms: Option<u64>,
     pub pending_sound: SoundCue,
     pub display_seq: u64,
     pub sound_seq: u64,
@@ -215,6 +254,7 @@ impl AppState {
                 last_seen: None,
             },
             mqtt_connected: false,
+            mqtt_latency_ms: None,
             pending_sound: SoundCue::None,
             display_seq: 0,
             sound_seq: 0,
@@ -245,7 +285,13 @@ impl AppState {
     pub fn compute_lines(&self, now: DateTime<Utc>) -> (String, String) {
         match self.persisted.active_page {
             Page::Off => (String::new(), String::new()),
-            Page::Clock => format_clock_lines(now, &self.persisted.timezone, self.esp32.temp_c),
+            Page::Clock => format_clock_lines(
+                now,
+                &self.persisted.timezone,
+                self.esp32.temp_c,
+                self.persisted.clock_24h,
+                &self.persisted.temp_unit,
+            ),
             Page::Timer => self.timer.format_lines(now),
             Page::Doomsday => {
                 if self.persisted.doomsday_targets.is_empty() {
@@ -260,21 +306,22 @@ impl AppState {
                         self.persisted.doomsday_targets.len(),
                         now,
                         &self.persisted.timezone,
+                        self.persisted.doomsday_days_only,
                     )
                 }
             }
         }
     }
 
-    /// Evaluates timer expiration and daily schedules for the current tick.
-    /// Returns `Some(SoundCue)` if a sound was triggered.
+    /// Evaluates timer expiration and daily / repeating interval schedules.
     pub fn tick(&mut self, now: DateTime<Utc>) -> Option<SoundCue> {
         let mut triggered_sound = None;
 
         if self.timer.check_expired(now) {
-            info!("Timer expired — queuing Done sound cue");
-            self.pending_sound = SoundCue::Done;
-            triggered_sound = Some(SoundCue::Done);
+            let cue = self.persisted.timer_done_sound;
+            info!("Timer expired — queuing {:?} sound cue", cue);
+            self.pending_sound = cue;
+            triggered_sound = Some(cue);
         }
 
         let tz: Tz = self
@@ -289,12 +336,29 @@ impl AppState {
             if !rule.enabled {
                 continue;
             }
-            if local.hour() == rule.hour
+            if let Some(interval_min) = rule.repeat_minutes.filter(|&m| m > 0) {
+                let due = match rule.last_triggered_at {
+                    None => true,
+                    Some(prev) => (now - prev).num_seconds() >= (interval_min as i64) * 60,
+                };
+                if due {
+                    rule.last_triggered_at = Some(now);
+                    info!(
+                        "Repeating schedule '{}' triggered (every {} min)",
+                        rule.label, interval_min
+                    );
+                    self.pending_sound = rule.sound;
+                    triggered_sound = Some(rule.sound);
+                }
+            } else if local.hour() == rule.hour
                 && local.minute() == rule.minute
                 && rule.last_triggered_date != Some(today)
             {
                 rule.last_triggered_date = Some(today);
-                info!("Schedule '{}' triggered ({:02}:{:02})", rule.label, rule.hour, rule.minute);
+                info!(
+                    "Daily schedule '{}' triggered ({:02}:{:02})",
+                    rule.label, rule.hour, rule.minute
+                );
                 self.pending_sound = rule.sound;
                 triggered_sound = Some(rule.sound);
             }
@@ -303,8 +367,6 @@ impl AppState {
         triggered_sound
     }
 
-    /// Builds a `DisplayCommand` if the display output changed, a one-shot sound is pending,
-    /// or `force` is true (e.g. when ESP32 reconnects). Clears `pending_sound` upon returning `Some`.
     pub fn take_display_command(&mut self, now: DateTime<Utc>, force: bool) -> Option<DisplayCommand> {
         let (l1, l2) = self.compute_lines(now);
         let bl = if self.persisted.active_page == Page::Off || !self.persisted.backlight {
@@ -377,7 +439,7 @@ impl AppState {
             }
             "action_inc" => match self.persisted.active_page {
                 Page::Timer => {
-                    self.timer.adjust_minutes(5);
+                    self.timer.adjust_minutes(self.persisted.timer_step_minutes as i32);
                     true
                 }
                 Page::Doomsday if !self.persisted.doomsday_targets.is_empty() => {
@@ -391,7 +453,7 @@ impl AppState {
             },
             "action_dec" => match self.persisted.active_page {
                 Page::Timer => {
-                    self.timer.adjust_minutes(-5);
+                    self.timer.adjust_minutes(-(self.persisted.timer_step_minutes as i32));
                     true
                 }
                 Page::Doomsday if !self.persisted.doomsday_targets.is_empty() => {
@@ -428,6 +490,11 @@ impl AppState {
             backlight: self.persisted.backlight,
             brightness: self.persisted.brightness,
             timezone: self.persisted.timezone.clone(),
+            clock_24h: self.persisted.clock_24h,
+            temp_unit: self.persisted.temp_unit.clone(),
+            timer_step_minutes: self.persisted.timer_step_minutes,
+            timer_done_sound: self.persisted.timer_done_sound,
+            doomsday_days_only: self.persisted.doomsday_days_only,
             timer: self.timer.clone(),
             timer_remaining_seconds: self.timer.remaining_seconds(now),
             doomsday_targets: self.persisted.doomsday_targets.clone(),
@@ -435,6 +502,7 @@ impl AppState {
             schedules: self.persisted.schedules.clone(),
             esp32: self.esp32.clone(),
             mqtt_connected: self.mqtt_connected,
+            mqtt_latency_ms: self.mqtt_latency_ms,
             display_seq: self.display_seq,
             sound_seq: self.sound_seq,
             timestamp: now,
@@ -456,6 +524,7 @@ fn load_persisted(path: &Path) -> Option<PersistedState> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Duration;
     use tempfile::tempdir;
 
     #[test]
@@ -471,16 +540,40 @@ mod tests {
         assert_eq!(cmd1.snd, SoundCue::None);
         assert_eq!(cmd1.seq, 1);
 
-        // No change -> None
         assert!(state.take_display_command(now, false).is_none());
 
-        // Queue sound -> emitted once, then cleared
         state.pending_sound = SoundCue::Chime;
         let cmd2 = state.take_display_command(now, false).unwrap();
         assert_eq!(cmd2.snd, SoundCue::Chime);
         assert_eq!(cmd2.seq, 2);
         assert_eq!(state.pending_sound, SoundCue::None);
         assert!(state.take_display_command(now, false).is_none());
+    }
+
+    #[test]
+    fn repeating_schedule_fires_on_interval() {
+        let dir = tempdir().unwrap();
+        let mut cfg = AppConfig::from_env();
+        cfg.state_file = dir.path().join("state.json");
+
+        let mut state = AppState::load_or_init(&cfg);
+        let t0 = Utc::now();
+        state.persisted.schedules.push(ScheduleRule {
+            id: "r1".to_string(),
+            label: "Hydrate".to_string(),
+            hour: 0,
+            minute: 0,
+            repeat_minutes: Some(10),
+            sound: SoundCue::Beep,
+            enabled: true,
+            last_triggered_date: None,
+            last_triggered_at: Some(t0),
+        });
+
+        assert_eq!(state.tick(t0 + Duration::minutes(9)), None);
+        assert_eq!(state.tick(t0 + Duration::minutes(10)), Some(SoundCue::Beep));
+        assert_eq!(state.tick(t0 + Duration::minutes(15)), None);
+        assert_eq!(state.tick(t0 + Duration::minutes(20)), Some(SoundCue::Beep));
     }
 
     #[test]
@@ -492,12 +585,12 @@ mod tests {
         {
             let mut state = AppState::load_or_init(&cfg);
             state.persisted.active_page = Page::Doomsday;
-            state.persisted.brightness = 180;
+            state.persisted.clock_24h = true;
             state.save_persisted();
         }
 
         let reloaded = AppState::load_or_init(&cfg);
         assert_eq!(reloaded.persisted.active_page, Page::Doomsday);
-        assert_eq!(reloaded.persisted.brightness, 180);
+        assert!(reloaded.persisted.clock_24h);
     }
 }
